@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 """
+VIBECODIGN -> CLAUDE CLI
+Progamador -> Alejandro Rodríguez Duque
+Fecha: 10/07/2026
+LICENCIA -> VER ARCHIVO LICENCE
 ================================================================================
   SNAKE resuelto mediante NEUROEVOLUCION (Red Neuronal + Algoritmo Genetico)
   + Menu interactivo, Modo entrenamiento a maxima velocidad, Juego manual y
