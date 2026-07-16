@@ -1,93 +1,92 @@
 # -*- coding: utf-8 -*-
 """
 VIBECODIGN -> CLAUDE CLI
-Progamador -> Alejandro Rodríguez Duque
-Fecha: 10/07/2026
+Progamador -> Alejandro Rodriguez Duque
 LICENCIA -> VER ARCHIVO LICENCE
 ================================================================================
-  SNAKE resuelto mediante NEUROEVOLUCION (Red Neuronal + Algoritmo Genetico)
-  + Menu interactivo, Modo entrenamiento a maxima velocidad, Juego manual y
-    Salon de la Fama (trofeos) con persistencia en JSON.
+  SNAKE IA - MACHINE LEARNING (Red Neuronal + Algoritmo Genetico)
 ================================================================================
-  Reglas:
-    - Tablero 8x8, movimiento bloque a bloque.
-    - Poblacion de 25 agentes, evolucion de Gen 0 a Gen 4.
-    - Red feedforward (numpy): 9 entradas -> 12 ocultas -> 3 salidas.
-    - Algoritmo genetico: Elitismo + torneo + crossover + mutacion (5%).
+  Este modulo es el CEREBRO del proyecto y no sabe nada de interfaces: ni web,
+  ni WebSocket, ni React. Solo matematicas con NumPy.
 
-  Requisitos:  pip install pygame numpy
-  Ejecucion :  python snake_neuroevolution.py
+    - `NeuralNetwork`  red feedforward 10 -> 12 -> 3
+    - `Snake`          el agente: sensores, movimiento, tamano y fitness
+    - `crossover` / `mutate` / `next_generation`   algoritmo genetico
+    - `train`          la neuroevolucion completa, con herencia de linaje
 
-  Estados:
-    MENU              -> Jugar Manualmente / Entrenar IA / Historial de Trofeos
-    JUGAR MANUAL      -> flechas del teclado, ESC para volver
-    ENTRENAR IA       -> 5 generaciones a maxima velocidad, guarda al campeon
-    HISTORIAL         -> lista de campeones guardados; ENTER reproduce su partida
+  Lo usan `ai_server.py` (servidor de la web) y cualquier script suelto.
+  La persistencia vive en `storage.py`.
+
+  NEUROEVOLUCION CON HERENCIA
+  ---------------------------
+  No hay descenso de gradiente ni dataset. Se evoluciona una poblacion:
+    Gen 1: pesos aleatorios (o heredados de un linaje previo).
+    Gen N: los MEJORES hijos de la Gen N-1 son la base de la Gen N.
+           La elite pasa intacta; el resto son cruces mutados de los mejores.
+  Asi la Generacion 2 se entrena literalmente sobre los mejores de la 1.
 ================================================================================
 """
 
-import os
-import sys
-import json
 import random
-import datetime
 import numpy as np
-import pygame
 
 # =============================================================================
-#  CONFIGURACION GLOBAL
+#  PARAMETROS DEL MUNDO Y DEL ALGORITMO
 # =============================================================================
-GRID          = 8            # Cuadricula 8x8 (reglas del juego)
-CELL          = 64           # Pixeles por bloque
-PANEL_H       = 140          # Altura del panel superior de informacion
-BOARD_PX      = GRID * CELL  # Tablero en pixeles
-WIN_W         = BOARD_PX
-WIN_H         = BOARD_PX + PANEL_H
+GRID_SIZES    = (8, 10, 15)  # Dimensiones de tablero que ofrece la interfaz
+DEFAULT_GRID  = 8
 
-POP_SIZE      = 25           # 25 agentes por generacion
-MAX_GEN       = 4            # Se detiene al terminar la Generacion 4
-ENERGY_START  = 200          # Contador de energia/pasos inicial
-ELITE_COUNT   = 3            # Elitismo: mejores redes conservadas intactas
-MUTATION_RATE = 0.05         # Probabilidad de mutacion del 5%
+POP_SIZE      = 25           # Agentes por generacion
+DEFAULT_GENERATIONS = 5      # Generaciones por entrenamiento
+MIN_GENERATIONS = 1
+MAX_GENERATIONS = 100
+
+ENERGY_START  = 200          # Pasos sin comer antes de morir de inanicion
+ELITE_COUNT   = 3            # Elitismo: mejores redes que pasan intactas
+MUTATION_RATE = 0.05         # Probabilidad de mutacion por peso (5%)
 MUTATION_STD  = 0.20         # Desviacion del ruido gaussiano de mutacion
 TOURNAMENT_K  = 3            # Tamano del torneo de seleccion
 
-# Arquitectura de la red neuronal
-N_INPUTS      = 9            # 3 direcciones (Frente/Izq/Der) x 3 rasgos
-N_HIDDEN      = 12
-N_OUTPUTS     = 3            # Recto / Girar Izquierda / Girar Derecha
+INITIAL_LENGTH = 3           # Longitud con la que nace la serpiente
+FRUIT_REWARD   = 1000        # Fitness que aporta cada bloque de crecimiento
 
-# --- CONTROL DE VELOCIDAD ---
-FPS_MENU      = 60           # Fluidez del menu
-FPS_PLAY      = 12           # Velocidad jugable (manual y demo de campeon)
-TRAIN_UNLIMITED = True       # True = entrenamiento a maxima velocidad (sin tick)
-TRAIN_RENDER_EVERY = 4       # Refresca la pantalla cada N pasos durante el entreno
-
-# Persistencia
-SCRIPT_DIR    = os.path.dirname(os.path.abspath(__file__))
-TROPHY_FILE   = os.path.join(SCRIPT_DIR, "mejores_ias.json")
+# --- Arquitectura de la red ---
+# 9 sensores del entorno + 1 propioceptivo (su propio tamano) = 10 entradas.
+N_ENV_INPUTS = 9             # 3 direcciones (Frente/Izq/Der) x 3 rasgos
+N_INPUTS     = 10
+N_HIDDEN     = 12
+N_OUTPUTS    = 3             # Recto / Girar Izquierda / Girar Derecha
 
 # Direcciones en orden HORARIO: UP -> RIGHT -> DOWN -> LEFT
 DIRS = [(0, -1), (1, 0), (0, 1), (-1, 0)]
 
-# Colores
-C_BG      = (18, 18, 24)
-C_PANEL   = (28, 28, 40)
-C_GRID    = (40, 40, 55)
-C_SNAKE   = (60, 220, 120)
-C_HEAD    = (150, 255, 190)
-C_FOOD    = (240, 80, 80)
-C_TEXT    = (235, 235, 245)
-C_MUTED   = (150, 150, 170)
-C_ACCENT  = (255, 210, 90)
-C_BTN     = (44, 44, 62)
-C_BTN_SEL = (70, 100, 160)
-C_DEAD    = (90, 40, 40)
-
-# Nombres aleatorios para los campeones
+# Nombres aleatorios para bautizar especimenes sin nombre
 NAME_A = ["Alpha", "Cerebro", "Neo", "Viper", "Cobra", "Quantum", "Titan",
           "Nova", "Omega", "Zenith", "Hydra", "Pixel", "Turbo", "Mamba"]
 NAME_B = ["Snake", "Mind", "Core", "Brain", "Genoma", "Reptil", "IA", "Neura"]
+
+
+def random_name():
+    """Nombre aleatorio para un especimen sin bautizar."""
+    return f"{random.choice(NAME_A)}-{random.choice(NAME_B)}-V{random.randint(1, 99)}"
+
+
+def clamp_generations(value):
+    """Normaliza el numero de generaciones que llega del usuario (1 a 100)."""
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_GENERATIONS
+    return max(MIN_GENERATIONS, min(MAX_GENERATIONS, value))
+
+
+def clamp_grid(value):
+    """Valida el tamano de tablero; cualquier valor raro cae al de por defecto."""
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_GRID
+    return value if value in GRID_SIZES else DEFAULT_GRID
 
 
 # =============================================================================
@@ -98,7 +97,7 @@ class NeuralNetwork:
 
     def __init__(self, weights=None):
         """Crea la red. Sin pesos, los inicializa aleatoriamente (init He);
-        con `weights`, reutiliza los pesos dados (hijos del algoritmo genetico)."""
+        con `weights`, reutiliza los dados (hijos del algoritmo genetico)."""
         if weights is None:
             self.W1 = np.random.randn(N_HIDDEN, N_INPUTS) * np.sqrt(2.0 / N_INPUTS)
             self.b1 = np.zeros(N_HIDDEN)
@@ -110,7 +109,7 @@ class NeuralNetwork:
     def forward(self, x):
         """Propaga las entradas y devuelve la accion elegida:
         0=Recto, 1=Girar izquierda, 2=Girar derecha (indice de la salida maxima)."""
-        h = np.maximum(0.0, self.W1 @ x + self.b1)   # Capa oculta con activacion ReLU
+        h = np.maximum(0.0, self.W1 @ x + self.b1)   # Capa oculta con ReLU
         o = self.W2 @ h + self.b2                     # Capa de salida lineal
         return int(np.argmax(o))
 
@@ -129,9 +128,17 @@ class NeuralNetwork:
 
     @classmethod
     def from_dict(cls, d):
-        """Reconstruye una red a partir del diccionario producido por `to_dict`."""
-        weights = [np.array(d["W1"]), np.array(d["b1"]),
-                   np.array(d["W2"]), np.array(d["b2"])]
+        """Reconstruye una red desde el diccionario producido por `to_dict`.
+
+        Acepta redes de 9 entradas guardadas antes de existir el sensor de
+        tamano: se les anade una columna de CEROS. El peso cero hace que la
+        entrada nueva no influya, asi que la red decide exactamente lo mismo que
+        antes; a partir de ahi la mutacion puede empezar a darle uso.
+        """
+        W1 = np.array(d["W1"], dtype=np.float64)
+        if W1.shape[1] == N_ENV_INPUTS:
+            W1 = np.hstack([W1, np.zeros((W1.shape[0], 1))])
+        weights = [W1, np.array(d["b1"]), np.array(d["W2"]), np.array(d["b2"])]
         return cls(weights)
 
 
@@ -158,21 +165,26 @@ def mutate(net):
 #  AGENTE (SNAKE)
 # =============================================================================
 class Snake:
-    """Agente Snake: cuerpo sobre la cuadricula, sensores, movimiento y estado
-    de partida. Puede estar gobernado por una red neuronal o por el teclado."""
+    """Agente Snake: cuerpo sobre la cuadricula, sensores, movimiento y estado.
 
-    def __init__(self, brain=None, use_energy=True):
-        """Inicializa el agente con un cerebro (red neuronal) dado o uno nuevo.
+    El tablero es un parametro (`grid`), no una constante global: la interfaz
+    ofrece 8x8, 10x10 y 15x15. Los sensores se normalizan dividiendo por `grid`,
+    de modo que una red entrenada en 8x8 sigue siendo valida en 15x15.
+    """
+
+    def __init__(self, brain=None, grid=DEFAULT_GRID, use_energy=True):
+        """Inicializa el agente con un cerebro dado o uno nuevo.
         `use_energy` activa la muerte por inanicion (se desactiva en modo manual)."""
+        self.grid       = grid
         self.brain      = brain if brain is not None else NeuralNetwork()
         self.use_energy = use_energy
         self.reset()
 
     def reset(self):
         """Coloca la serpiente en el centro y reinicia cuerpo, energia y marcadores."""
-        cx = cy = GRID // 2
-        self.body   = [(cx, cy), (cx - 1, cy), (cx - 2, cy)]
-        self.dir_i  = 1                 # Indice de direccion: 1 = mirando a la derecha
+        cx = cy = self.grid // 2
+        self.body   = [(cx - i, cy) for i in range(INITIAL_LENGTH)]
+        self.dir_i  = 1                 # 1 = mirando a la derecha
         self.alive  = True
         self.energy = ENERGY_START
         self.steps  = 0
@@ -180,9 +192,25 @@ class Snake:
         self.food   = None
         self.spawn_food()
 
+    # --- Tamano -------------------------------------------------------------
+    @property
+    def length(self):
+        """Tamano actual de la serpiente. Crece 1 bloque por cada manzana."""
+        return len(self.body)
+
+    def _length_sensor(self):
+        """Sensor propioceptivo [0-1]: que fraccion del tablero ocupa su cuerpo.
+
+        Es la entrada que le permite 'saber que tiene un tamano'. Se normaliza
+        por el area total para que el valor signifique lo mismo en 8x8 que en
+        15x15 (en un tablero pequeno, 10 bloques son muchisimo; en uno grande,
+        casi nada).
+        """
+        return self.length / float(self.grid * self.grid)
+
     def spawn_food(self):
-        """Sitúa una fruta en una celda libre elegida al azar (None si no queda ninguna)."""
-        libres = [(x, y) for x in range(GRID) for y in range(GRID)
+        """Situa una manzana en una celda libre al azar (None si no queda ninguna)."""
+        libres = [(x, y) for x in range(self.grid) for y in range(self.grid)
                   if (x, y) not in self.body]
         self.food = random.choice(libres) if libres else None
 
@@ -190,24 +218,24 @@ class Snake:
         """Sensor: distancia normalizada [0-1] hasta la pared en la direccion `d`."""
         x, y = head
         dist, nx, ny = 0, x + d[0], y + d[1]
-        while 0 <= nx < GRID and 0 <= ny < GRID:
+        while 0 <= nx < self.grid and 0 <= ny < self.grid:
             dist += 1
             nx += d[0]; ny += d[1]
-        return dist / float(GRID)
+        return dist / float(self.grid)
 
     def _body_distance(self, head, d):
         """Sensor: proximidad [0-1] al propio cuerpo en la direccion `d`
         (1.0 = adyacente, 0.0 = sin cuerpo en esa linea)."""
         x, y = head
         nx, ny, step = x + d[0], y + d[1], 1
-        while 0 <= nx < GRID and 0 <= ny < GRID:
+        while 0 <= nx < self.grid and 0 <= ny < self.grid:
             if (nx, ny) in self.body:
-                return 1.0 - (step - 1) / float(GRID)
+                return 1.0 - (step - 1) / float(self.grid)
             nx += d[0]; ny += d[1]; step += 1
         return 0.0
 
     def get_inputs(self):
-        """9 entradas relativas: pared/cuerpo/fruta en Frente, Izq y Der."""
+        """10 entradas: pared/cuerpo/manzana en Frente, Izq y Der + su tamano."""
         head  = self.body[0]
         front = DIRS[self.dir_i]
         left  = DIRS[(self.dir_i - 1) % 4]
@@ -222,14 +250,15 @@ class Snake:
         vx, vy = vx / norm, vy / norm
         food = [vx * d[0] + vy * d[1] for d in (front, left, right)]
 
-        return np.array(wall + body + food, dtype=np.float64)
+        return np.array(wall + body + food + [self._length_sensor()],
+                        dtype=np.float64)
 
     def _apply_action(self, action):
         """Traduce la salida de la red en un giro relativo (1=izq, 2=der; 0=recto)."""
         if action == 1:
-            self.dir_i = (self.dir_i - 1) % 4   # Girar izquierda
+            self.dir_i = (self.dir_i - 1) % 4
         elif action == 2:
-            self.dir_i = (self.dir_i + 1) % 4   # Girar derecha
+            self.dir_i = (self.dir_i + 1) % 4
 
     def set_absolute_direction(self, new_i):
         """Para juego manual: fija direccion sin permitir giro de 180 grados."""
@@ -238,16 +267,16 @@ class Snake:
         self.dir_i = new_i
 
     def advance(self):
-        """Mueve un bloque; gestiona colisiones, energia y frutas."""
+        """Mueve un bloque; gestiona colisiones, energia y crecimiento."""
         if not self.alive:
             return
         d = DIRS[self.dir_i]
         hx, hy = self.body[0]
         nx, ny = hx + d[0], hy + d[1]
 
-        if not (0 <= nx < GRID and 0 <= ny < GRID):      # Pared
+        if not (0 <= nx < self.grid and 0 <= ny < self.grid):   # Pared
             self.alive = False; return
-        if (nx, ny) in self.body[:-1]:                    # Propio cuerpo
+        if (nx, ny) in self.body[:-1]:                           # Propio cuerpo
             self.alive = False; return
 
         self.body.insert(0, (nx, ny))
@@ -256,13 +285,14 @@ class Snake:
             self.energy -= 1
 
         if (nx, ny) == self.food:
+            # Comer = NO quitar la cola: el cuerpo crece un bloque.
             self.fruits += 1
             self.energy = ENERGY_START
             self.spawn_food()
         else:
             self.body.pop()
 
-        if self.use_energy and self.energy <= 0:          # Inanicion
+        if self.use_energy and self.energy <= 0:                 # Inanicion
             self.alive = False
 
     def step_ai(self):
@@ -273,8 +303,29 @@ class Snake:
         self.advance()
 
     def fitness(self):
-        """Fitness = pasos sobrevividos + (frutas * 1000)."""
-        return self.steps + self.fruits * 1000
+        """Fitness = pasos sobrevividos + crecimiento * FRUIT_REWARD.
+
+        El crecimiento es `length - INITIAL_LENGTH`, es decir cuantos bloques ha
+        ganado comiendo. Sobrevivir suma poco y crecer suma muchisimo, asi que
+        la evolucion premia sobre todo comer manzanas; los pasos solo desempatan
+        entre agentes que aun no han comido.
+        """
+        crecimiento = self.length - INITIAL_LENGTH
+        return self.steps + crecimiento * FRUIT_REWARD
+
+    def to_state(self):
+        """Instantanea serializable, pensada para enviarla al navegador.
+        El cliente solo dibuja: nunca calcula reglas."""
+        return {
+            "body":   [list(c) for c in self.body],
+            "food":   list(self.food) if self.food else None,
+            "alive":  self.alive,
+            "fruits": self.fruits,
+            "steps":  self.steps,
+            "energy": self.energy,
+            "length": self.length,
+            "grid":   self.grid,
+        }
 
 
 # =============================================================================
@@ -282,271 +333,79 @@ class Snake:
 # =============================================================================
 def tournament_select(pop):
     """Seleccion por torneo: toma K agentes al azar y devuelve el de mayor fitness."""
-    aspirantes = random.sample(pop, TOURNAMENT_K)
+    aspirantes = random.sample(pop, min(TOURNAMENT_K, len(pop)))
     return max(aspirantes, key=lambda s: s.fitness())
 
 
-def next_generation(pop):
-    """Construye la siguiente generacion: conserva la elite intacta y rellena el
-    resto con hijos obtenidos por seleccion, cruce y mutacion."""
+def next_generation(pop, grid=DEFAULT_GRID, pop_size=POP_SIZE):
+    """Construye la siguiente generacion a partir de los MEJORES de la actual.
+
+    Aqui ocurre la herencia: se ordena por fitness, la elite pasa intacta y el
+    resto son hijos de padres elegidos por torneo (los buenos salen mas), con
+    cruce uniforme y mutacion. La Gen N+1 nace, literalmente, de la Gen N.
+    """
     ordenados = sorted(pop, key=lambda s: s.fitness(), reverse=True)
-    nueva = [Snake(ordenados[i].brain.clone()) for i in range(ELITE_COUNT)]
-    while len(nueva) < POP_SIZE:
+    nueva = [Snake(ordenados[i].brain.clone(), grid=grid)
+             for i in range(min(ELITE_COUNT, len(ordenados)))]
+    while len(nueva) < pop_size:
         padre_a = tournament_select(pop)
         padre_b = tournament_select(pop)
         hijo = mutate(crossover(padre_a.brain, padre_b.brain))
-        nueva.append(Snake(hijo))
+        nueva.append(Snake(hijo, grid=grid))
     return nueva
 
 
-# =============================================================================
-#  PERSISTENCIA DE TROFEOS
-# =============================================================================
-def load_trophies():
-    """Lee el Salon de la Fama desde el JSON; devuelve [] si no existe o esta corrupto."""
-    if not os.path.exists(TROPHY_FILE):
-        return []
-    try:
-        with open(TROPHY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return []
+def seed_population(seed_brain=None, grid=DEFAULT_GRID, pop_size=POP_SIZE):
+    """Poblacion inicial de un entrenamiento.
+
+    Sin `seed_brain` empieza de cero (especimen nuevo, pesos aleatorios). Con el,
+    hereda el linaje: un clon exacto -para no perder nunca lo aprendido- mas
+    variantes mutadas que exploran a su alrededor. Es lo que permite continuar
+    entrenando a un especimen guardado en vez de reiniciarlo.
+    """
+    if seed_brain is None:
+        return [Snake(grid=grid) for _ in range(pop_size)]
+    poblacion = [Snake(seed_brain.clone(), grid=grid)]
+    while len(poblacion) < pop_size:
+        poblacion.append(Snake(mutate(seed_brain), grid=grid))
+    return poblacion
 
 
-def save_trophy(brain, fitness, fruits, steps):
-    """Anade un campeon al salon de la fama y ordena por fitness."""
-    trofeos = load_trophies()
-    nombre = f"{random.choice(NAME_A)}-{random.choice(NAME_B)}-V{random.randint(1, 99)}"
-    registro = {
-        "nombre":   nombre,
-        "fecha":    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "fitness":  int(fitness),
-        "frutas":   int(fruits),
-        "pasos":    int(steps),
-        "pesos":    brain.to_dict(),
-    }
-    trofeos.append(registro)
-    trofeos.sort(key=lambda t: t["fitness"], reverse=True)
-    trofeos = trofeos[:15]  # Conserva solo el top 15
-    try:
-        with open(TROPHY_FILE, "w", encoding="utf-8") as f:
-            json.dump(trofeos, f, indent=2, ensure_ascii=False)
-    except OSError:
-        pass
-    return nombre
+def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
+          seed_brain=None, on_event=None):
+    """Ejecuta la neuroevolucion durante `generations` generaciones (1 a 100).
 
+    En vez de dibujar, llama a `on_event(tipo, datos)`: cada interfaz decide que
+    hacer con el progreso. Si `on_event` devuelve False, el entrenamiento se
+    CANCELA y esta funcion devuelve None.
 
-# =============================================================================
-#  UTILIDADES DE RENDER
-# =============================================================================
-def make_fonts():
-    """Crea y devuelve el juego de fuentes (varios tamaños) usado por la interfaz."""
-    return {
-        "big":   pygame.font.SysFont("consolas", 40, bold=True),
-        "mid":   pygame.font.SysFont("consolas", 26, bold=True),
-        "reg":   pygame.font.SysFont("consolas", 20),
-        "small": pygame.font.SysFont("consolas", 16),
-    }
+    NO guarda nada: devuelve el mejor linaje y es quien llama el que decide si
+    crea un especimen nuevo o le suma generaciones a uno existente.
 
+    Devuelve {"brain", "fitness", "frutas", "pasos", "length", "generaciones",
+    "grid"}, o None si se cancelo.
 
-def draw_text(screen, font, text, x, y, color=C_TEXT, center=False):
-    """Dibuja una cadena en (x, y); si `center` es True, (x, y) es el centro del texto.
-    Devuelve el rectangulo ocupado (util para detectar clics)."""
-    surf = font.render(text, True, color)
-    rect = surf.get_rect()
-    if center:
-        rect.center = (x, y)
-    else:
-        rect.topleft = (x, y)
-    screen.blit(surf, rect)
-    return rect
+    Eventos: ("step", {...}) por turno simulado, ("gen", {...}) por generacion.
+    """
+    generations = clamp_generations(generations)
+    grid = clamp_grid(grid)
+    population = seed_population(seed_brain, grid, pop_size)
 
-
-def draw_board(screen, snake, y_off=PANEL_H):
-    """Dibuja el tablero completo: rejilla, fruta y serpiente (cabeza resaltada,
-    color apagado si esta muerta). `y_off` desplaza el tablero bajo el panel."""
-    pygame.draw.rect(screen, C_BG, (0, y_off, BOARD_PX, BOARD_PX))
-    for i in range(GRID + 1):
-        pygame.draw.line(screen, C_GRID, (i * CELL, y_off),
-                         (i * CELL, y_off + BOARD_PX))
-        pygame.draw.line(screen, C_GRID, (0, y_off + i * CELL),
-                         (BOARD_PX, y_off + i * CELL))
-    if snake.food is not None:
-        fx, fy = snake.food
-        pygame.draw.rect(screen, C_FOOD,
-                         (fx * CELL + 10, y_off + fy * CELL + 10,
-                          CELL - 20, CELL - 20), border_radius=14)
-    body_color = C_SNAKE if snake.alive else C_DEAD
-    for idx, (x, y) in enumerate(snake.body):
-        col = C_HEAD if (idx == 0 and snake.alive) else body_color
-        pygame.draw.rect(screen, col,
-                         (x * CELL + 4, y_off + y * CELL + 4,
-                          CELL - 8, CELL - 8), border_radius=9)
-
-
-def poll_global_quit(event):
-    """Cierra la app ante el boton X o Alt+F4."""
-    if event.type == pygame.QUIT:
-        pygame.quit(); sys.exit()
-
-
-# =============================================================================
-#  ESTADO: MENU PRINCIPAL
-# =============================================================================
-def run_menu(screen, clock, fonts):
-    """Muestra el menu principal y bloquea hasta que el usuario elige una opcion.
-    Devuelve la accion elegida: 'manual', 'train' o 'trophies'."""
-    opciones = ["Jugar Manualmente", "Entrenar IA Evolutiva", "Historial de Trofeos"]
-    resultados = ["manual", "train", "trophies"]
-    sel = 0
-    btn_w, btn_h, gap = 380, 62, 20
-    x0 = WIN_W // 2 - btn_w // 2
-    y0 = 250
-
-    def button_rects():
-        """Calcula los rectangulos de los botones (para dibujarlos y detectar clics)."""
-        return [pygame.Rect(x0, y0 + i * (btn_h + gap), btn_w, btn_h)
-                for i in range(len(opciones))]
-
-    while True:
-        rects = button_rects()
-        mouse = pygame.mouse.get_pos()
-
-        for event in pygame.event.get():
-            poll_global_quit(event)
-            if event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_ESCAPE,):
-                    pygame.quit(); sys.exit()
-                if event.key in (pygame.K_DOWN, pygame.K_s):
-                    sel = (sel + 1) % len(opciones)
-                if event.key in (pygame.K_UP, pygame.K_w):
-                    sel = (sel - 1) % len(opciones)
-                if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER):
-                    return resultados[sel]
-            if event.type == pygame.MOUSEMOTION:
-                for i, r in enumerate(rects):
-                    if r.collidepoint(mouse):
-                        sel = i
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                for i, r in enumerate(rects):
-                    if r.collidepoint(mouse):
-                        return resultados[i]
-
-        # --- Render ---
-        screen.fill(C_BG)
-        draw_text(screen, fonts["big"], "S N A K E   I A", WIN_W // 2, 90,
-                  C_ACCENT, center=True)
-        draw_text(screen, fonts["reg"], "Neuroevolucion: Redes Neuronales + Algoritmo Genetico",
-                  WIN_W // 2, 145, C_MUTED, center=True)
-
-        for i, (r, txt) in enumerate(zip(rects, opciones)):
-            col = C_BTN_SEL if i == sel else C_BTN
-            pygame.draw.rect(screen, col, r, border_radius=12)
-            pygame.draw.rect(screen, C_ACCENT if i == sel else C_GRID, r, 2,
-                             border_radius=12)
-            draw_text(screen, fonts["mid"], txt, r.centerx, r.centery,
-                      C_TEXT, center=True)
-
-        draw_text(screen, fonts["small"],
-                  "Flechas / Raton para elegir  -  ENTER para confirmar  -  ESC para salir",
-                  WIN_W // 2, WIN_H - 40, C_MUTED, center=True)
-
-        pygame.display.flip()
-        clock.tick(FPS_MENU)
-
-
-# =============================================================================
-#  ESTADO: JUGAR MANUALMENTE
-# =============================================================================
-def run_manual(screen, clock, fonts):
-    """Modo de juego manual: el usuario controla la serpiente con flechas/WASD.
-    `R` reinicia tras perder y `ESC` vuelve al menu."""
-    snake = Snake(use_energy=False)   # Sin muerte por inanicion en modo manual
-    key_to_dir = {
-        pygame.K_UP: 0, pygame.K_RIGHT: 1, pygame.K_DOWN: 2, pygame.K_LEFT: 3,
-        pygame.K_w: 0, pygame.K_d: 1, pygame.K_s: 2, pygame.K_a: 3,
-    }
-    pending = None   # Direccion pedida (se aplica en el proximo tick)
-
-    while True:
-        for event in pygame.event.get():
-            poll_global_quit(event)
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    return
-                if event.key in key_to_dir:
-                    pending = key_to_dir[event.key]
-                if event.key == pygame.K_r and not snake.alive:
-                    snake = Snake(use_energy=False); pending = None
-
-        if snake.alive:
-            if pending is not None:
-                snake.set_absolute_direction(pending)
-                pending = None
-            snake.advance()
-
-        # --- Render ---
-        screen.fill(C_BG)
-        pygame.draw.rect(screen, C_PANEL, (0, 0, WIN_W, PANEL_H))
-        pygame.draw.line(screen, C_GRID, (0, PANEL_H), (WIN_W, PANEL_H), 2)
-        draw_text(screen, fonts["mid"], "MODO MANUAL", 16, 14, C_ACCENT)
-        draw_text(screen, fonts["reg"], f"Frutas: {snake.fruits}", 16, 58)
-        draw_text(screen, fonts["reg"], f"Longitud: {len(snake.body)}", 16, 84)
-        draw_text(screen, fonts["small"],
-                  "Flechas/WASD para moverte   -   ESC para volver al menu",
-                  16, 112, C_MUTED)
-        draw_board(screen, snake)
-
-        if not snake.alive:
-            overlay = pygame.Surface((BOARD_PX, BOARD_PX)); overlay.set_alpha(200)
-            overlay.fill((10, 10, 16)); screen.blit(overlay, (0, PANEL_H))
-            draw_text(screen, fonts["big"], "GAME OVER", WIN_W // 2,
-                      PANEL_H + BOARD_PX // 2 - 30, C_FOOD, center=True)
-            draw_text(screen, fonts["reg"], f"Frutas: {snake.fruits}",
-                      WIN_W // 2, PANEL_H + BOARD_PX // 2 + 20, C_TEXT, center=True)
-            draw_text(screen, fonts["small"], "R para reiniciar  -  ESC para menu",
-                      WIN_W // 2, PANEL_H + BOARD_PX // 2 + 55, C_MUTED, center=True)
-
-        pygame.display.flip()
-        clock.tick(FPS_PLAY)
-
-
-# =============================================================================
-#  ESTADO: ENTRENAR IA EVOLUTIVA (maxima velocidad)
-# =============================================================================
-def run_training(screen, clock, fonts):
-    """Entrena la IA por neuroevolucion: simula cada agente de cada generacion a
-    maxima velocidad, evoluciona la poblacion y guarda al campeon global al terminar."""
-    population = [Snake() for _ in range(POP_SIZE)]
-    generation = 0
-    best_fitness = 0
-
-    # Mejor agente encontrado en toda la simulacion (campeon global)
-    best_brain = population[0].brain.clone()
-    best_fruits = best_steps = 0
+    best_fitness = -1
+    best_brain   = population[0].brain.clone()
+    best_fruits  = best_steps = 0
+    best_length  = INITIAL_LENGTH
     frame = 0
 
-    def draw_train_panel(gen, agent_idx, snake):
-        """Dibuja el panel superior con el progreso del entrenamiento en curso."""
-        pygame.draw.rect(screen, C_PANEL, (0, 0, WIN_W, PANEL_H))
-        pygame.draw.line(screen, C_GRID, (0, PANEL_H), (WIN_W, PANEL_H), 2)
-        draw_text(screen, fonts["mid"], "ENTRENANDO IA (max. velocidad)", 16, 12, C_ACCENT)
-        draw_text(screen, fonts["reg"], f"Generacion: {gen} / {MAX_GEN}", 16, 52)
-        draw_text(screen, fonts["reg"], f"Agente: #{agent_idx} / {POP_SIZE}", 16, 76)
-        draw_text(screen, fonts["reg"], f"Mejor Fitness Hist.: {best_fitness}", 250, 52, C_ACCENT)
-        draw_text(screen, fonts["reg"], f"Frutas (actual): {snake.fruits}", 250, 76)
-        draw_text(screen, fonts["small"], "ESC para cancelar y volver al menu", 16, 110, C_MUTED)
+    def emit(tipo, datos):
+        """Notifica a la interfaz; devuelve False si esta pide cancelar."""
+        if on_event is None:
+            return True
+        return on_event(tipo, datos) is not False
 
-    while generation <= MAX_GEN:
+    for gen in range(1, generations + 1):
         for idx, snake in enumerate(population, start=1):
             while snake.alive:
-                # Procesa eventos periodicamente (evita congelar la ventana)
-                if frame % TRAIN_RENDER_EVERY == 0:
-                    for event in pygame.event.get():
-                        poll_global_quit(event)
-                        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                            return
-
                 snake.step_ai()
                 frame += 1
 
@@ -555,170 +414,39 @@ def run_training(screen, clock, fonts):
                     best_brain   = snake.brain.clone()
                     best_fruits  = snake.fruits
                     best_steps   = snake.steps
+                    best_length  = snake.length
 
-                # Render throttled -> maxima velocidad de computo
-                if frame % TRAIN_RENDER_EVERY == 0:
-                    screen.fill(C_BG)
-                    draw_train_panel(generation, idx, snake)
-                    draw_board(screen, snake)
-                    pygame.display.flip()
-                    if not TRAIN_UNLIMITED:
-                        clock.tick(FPS_PLAY)
+                if not emit("step", {
+                    "generation":   gen,
+                    "generations":  generations,
+                    "agent":        idx,
+                    "pop_size":     pop_size,
+                    "best_fitness": best_fitness,
+                    "frame":        frame,
+                    "snake":        snake.to_state(),
+                }):
+                    return None
 
-        avg = sum(s.fitness() for s in population) / POP_SIZE
-        print(f"[Gen {generation}] Mejor fitness: {max(s.fitness() for s in population):5d} "
-              f"| Promedio: {avg:7.1f}")
+        fitnesses = [s.fitness() for s in population]
+        if not emit("gen", {
+            "generation":  gen,
+            "generations": generations,
+            "best":        max(fitnesses),
+            "avg":         sum(fitnesses) / float(len(population)),
+            "best_length": max(s.length for s in population),
+        }):
+            return None
 
-        if generation == MAX_GEN:
-            break
-        population = next_generation(population)
-        generation += 1
+        # La ultima generacion no necesita descendencia: ya se evaluo.
+        if gen < generations:
+            population = next_generation(population, grid, pop_size)
 
-    # --- Guardar campeon global ---
-    nombre = save_trophy(best_brain, best_fitness, best_fruits, best_steps)
-
-    # --- Pantalla de resultados (espera a ESC/ENTER) ---
-    while True:
-        for event in pygame.event.get():
-            poll_global_quit(event)
-            if event.type == pygame.KEYDOWN and event.key in (
-                    pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE):
-                return
-
-        screen.fill(C_BG)
-        draw_text(screen, fonts["big"], "ENTRENAMIENTO COMPLETADO", WIN_W // 2, 120,
-                  C_ACCENT, center=True)
-        lineas = [
-            f"Generaciones evolucionadas: 0 -> {MAX_GEN}",
-            "",
-            f"Campeon global: {nombre}",
-            f"Fitness maximo: {best_fitness}",
-            f"Frutas comidas: {best_fruits}",
-            f"Pasos sobrevividos: {best_steps}",
-            "",
-            "Guardado en el Historial de Trofeos.",
-            "",
-            "Presiona ENTER o ESC para volver al menu.",
-        ]
-        for i, txt in enumerate(lineas):
-            col = C_ACCENT if txt.startswith(("Campeon", "Fitness")) else C_TEXT
-            draw_text(screen, fonts["reg"], txt, WIN_W // 2, 190 + i * 32, col, center=True)
-        pygame.display.flip()
-        clock.tick(FPS_MENU)
-
-
-# =============================================================================
-#  ESTADO: HISTORIAL DE TROFEOS
-# =============================================================================
-def run_trophies(screen, clock, fonts):
-    """Muestra el Salon de la Fama con los campeones guardados; `ENTER` reproduce
-    la partida del seleccionado y `ESC` vuelve al menu."""
-    trofeos = load_trophies()
-    sel = 0
-
-    while True:
-        for event in pygame.event.get():
-            poll_global_quit(event)
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    return
-                if not trofeos:
-                    continue
-                if event.key in (pygame.K_DOWN, pygame.K_s):
-                    sel = (sel + 1) % len(trofeos)
-                if event.key in (pygame.K_UP, pygame.K_w):
-                    sel = (sel - 1) % len(trofeos)
-                if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER):
-                    run_demo(screen, clock, fonts, trofeos[sel])
-
-        # --- Render ---
-        screen.fill(C_BG)
-        draw_text(screen, fonts["big"], "SALON DE LA FAMA", WIN_W // 2, 55,
-                  C_ACCENT, center=True)
-
-        if not trofeos:
-            draw_text(screen, fonts["reg"],
-                      "Aun no hay campeones guardados.", WIN_W // 2, 220, C_MUTED, center=True)
-            draw_text(screen, fonts["reg"],
-                      "Entrena una IA para crear el primero.", WIN_W // 2, 255, C_MUTED, center=True)
-        else:
-            y = 120
-            for i, t in enumerate(trofeos[:10]):
-                r = pygame.Rect(30, y, WIN_W - 60, 48)
-                col = C_BTN_SEL if i == sel else C_BTN
-                pygame.draw.rect(screen, col, r, border_radius=8)
-                if i == sel:
-                    pygame.draw.rect(screen, C_ACCENT, r, 2, border_radius=8)
-                medal = "#{}".format(i + 1)
-                draw_text(screen, fonts["reg"], f"{medal}  {t['nombre']}", 45, y + 13)
-                draw_text(screen, fonts["reg"], f"Fitness: {t['fitness']}",
-                          WIN_W - 250, y + 13, C_ACCENT)
-                draw_text(screen, fonts["small"], t["fecha"], 45, y + 32, C_MUTED)
-                y += 56
-
-        draw_text(screen, fonts["small"],
-                  "Flechas para elegir  -  ENTER para ver jugar al campeon  -  ESC para volver",
-                  WIN_W // 2, WIN_H - 35, C_MUTED, center=True)
-        pygame.display.flip()
-        clock.tick(FPS_MENU)
-
-
-# =============================================================================
-#  ESTADO: DEMO DE UN CAMPEON GUARDADO
-# =============================================================================
-def run_demo(screen, clock, fonts, registro):
-    """Reproduce en bucle la partida de un campeon guardado, reconstruyendo su
-    cerebro desde el registro JSON. `ESC` vuelve al historial."""
-    brain = NeuralNetwork.from_dict(registro["pesos"])
-    snake = Snake(brain=brain.clone())
-
-    while True:
-        for event in pygame.event.get():
-            poll_global_quit(event)
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                return
-
-        if snake.alive:
-            snake.step_ai()
-        else:
-            pygame.time.wait(700)                    # Pausa breve
-            snake = Snake(brain=brain.clone())        # Reinicia la demostracion
-
-        # --- Render ---
-        screen.fill(C_BG)
-        pygame.draw.rect(screen, C_PANEL, (0, 0, WIN_W, PANEL_H))
-        pygame.draw.line(screen, C_GRID, (0, PANEL_H), (WIN_W, PANEL_H), 2)
-        draw_text(screen, fonts["mid"], f"CAMPEON: {registro['nombre']}", 16, 12, C_ACCENT)
-        draw_text(screen, fonts["reg"], f"Adaptacion (fitness): {registro['fitness']}", 16, 52)
-        draw_text(screen, fonts["reg"],
-                  f"Frutas ahora: {snake.fruits}   Energia: {snake.energy}", 16, 78)
-        draw_text(screen, fonts["small"], "ESC para volver al historial", 16, 112, C_MUTED)
-        draw_board(screen, snake)
-        pygame.display.flip()
-        clock.tick(FPS_PLAY)
-
-
-# =============================================================================
-#  BUCLE PRINCIPAL / MAQUINA DE ESTADOS
-# =============================================================================
-def main():
-    """Punto de entrada: inicializa Pygame y ejecuta la maquina de estados que
-    encadena menu, juego manual, entrenamiento e historial hasta que se cierra la app."""
-    pygame.init()
-    pygame.display.set_caption("Snake IA - Neuroevolucion")
-    screen = pygame.display.set_mode((WIN_W, WIN_H))
-    clock = pygame.time.Clock()
-    fonts = make_fonts()
-
-    while True:
-        accion = run_menu(screen, clock, fonts)
-        if accion == "manual":
-            run_manual(screen, clock, fonts)
-        elif accion == "train":
-            run_training(screen, clock, fonts)
-        elif accion == "trophies":
-            run_trophies(screen, clock, fonts)
-
-
-if __name__ == "__main__":
-    main()
+    return {
+        "brain":        best_brain,
+        "fitness":      int(best_fitness),
+        "frutas":       int(best_fruits),
+        "pasos":        int(best_steps),
+        "length":       int(best_length),
+        "generaciones": generations,
+        "grid":         grid,
+    }

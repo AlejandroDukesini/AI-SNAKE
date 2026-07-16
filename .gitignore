@@ -1,0 +1,18 @@
+# Node
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Configuracion local del usuario (tema, generaciones, tablero).
+# Se regenera sola: versionarla haria que cada maquina pisara las preferencias
+# de la otra en cada pull.
+config.json
+
+# Sistema
+.DS_Store
+Thumbs.db

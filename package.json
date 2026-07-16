@@ -1,0 +1,26 @@
+{
+  "name": "snake-ia-neuroevolucion",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Snake resuelto por neuroevolucion. React + Vite en el frontend; la IA (NumPy) corre en Python.",
+  "scripts": {
+    "dev": "python run.py",
+    "vite": "vite",
+    "server": "python ai_server.py",
+    "build": "vite build",
+    "start": "python run.py --prod",
+    "preview": "vite preview",
+    "migrar": "python migrar_historial.py"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "vite": "^6.0.7"
+  }
+}

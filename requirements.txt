@@ -1,0 +1,6 @@
+# Cerebro de la IA
+numpy>=1.24
+
+# Servidor de la IA (WebSocket + REST)
+fastapi>=0.110
+uvicorn[standard]>=0.27
