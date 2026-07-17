@@ -10,7 +10,7 @@ import { useCallback, useState } from 'react';
 import Board from '../components/Board';
 import { api } from '../lib/api';
 import { useSocket } from '../lib/useSocket';
-import { Panel, Title, Hint, Button, IconButton, Empty, Modal, Stat } from '../components/ui';
+import { Panel, Title, Hint, Button, IconButton, Empty, Modal, Stat, LevelBadge } from '../components/ui';
 
 /* Los especimenes importados del formato antiguo no registraron sus
    generaciones y no se pueden deducir: se dice, no se inventa una cifra. */
@@ -62,10 +62,14 @@ function ModelRow({ m, index, onProbar, onFavorito, onBorrar }) {
       <span className="text-xs text-muted tabular-nums w-6">#{index + 1}</span>
 
       <div className="flex-1 min-w-0">
-        <div className="font-medium text-ink truncate">{m.nombre}</div>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-medium text-ink truncate">{m.nombre}</span>
+          <LevelBadge nivel={m.nivel} etiqueta={m.nivel_etiqueta} className="shrink-0" />
+        </div>
         <div className="text-xs text-muted mt-0.5">
           historial/{m.carpeta}/ · {generacionesTexto(m.generaciones)} ·
           {' '}tamaño {m.length} · tablero {m.grid}×{m.grid}
+          {m.cobertura != null && <> · cobertura {(m.cobertura * 100).toFixed(1)}%</>}
         </div>
         <div className="text-xs text-muted">
           {m.sesiones?.length ?? 0} entrenamiento{(m.sesiones?.length ?? 0) === 1 ? '' : 's'}

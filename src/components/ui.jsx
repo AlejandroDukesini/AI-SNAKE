@@ -41,6 +41,23 @@ export function Stat({ label, value, accent = false }) {
   );
 }
 
+/* Insignia del nivel de inteligencia (N0…N5). El nivel lo calcula el servidor a
+   partir de la cobertura del tablero (ver plan.txt); aqui solo se pinta. Muestra
+   el codigo corto (N2) y, al pasar el raton, la etiqueta completa. */
+export function LevelBadge({ nivel, etiqueta, className = '' }) {
+  if (nivel === undefined || nivel === null) return null;
+  const corto = etiqueta ? etiqueta.split('·')[0].trim() : `N${nivel}`;
+  return (
+    <span
+      title={etiqueta || corto}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border
+        border-accent text-accent bg-accent/10 text-xs font-medium ${className}`}
+    >
+      🧠 {corto}
+    </span>
+  );
+}
+
 const VARIANTES = {
   ghost: 'bg-surface2 text-ink border-line hover:bg-line',
   primary: 'bg-accent text-on-accent border-accent hover:brightness-110 font-medium',

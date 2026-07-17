@@ -1,0 +1,28 @@
+[
+  {
+    "fecha": "2026-07-17 11:24:40",
+    "generaciones": 15,
+    "fitness": 10219,
+    "frutas": 10,
+    "pasos": 71,
+    "length": 13,
+    "grid": 8,
+    "cobertura": 0.2031,
+    "nivel": 2,
+    "nivel_etiqueta": "N2 · Forrajeo fiable",
+    "record": true
+  },
+  {
+    "fecha": "2026-07-17 11:25:27",
+    "generaciones": 20,
+    "fitness": 16339,
+    "frutas": 16,
+    "pasos": 193,
+    "length": 19,
+    "grid": 8,
+    "cobertura": 0.2969,
+    "nivel": 2,
+    "nivel_etiqueta": "N2 · Forrajeo fiable",
+    "record": true
+  }
+]

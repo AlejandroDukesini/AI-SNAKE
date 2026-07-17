@@ -128,8 +128,20 @@ def model_summary(m):
 
     La lista del historial no necesita los ~150 numeros de la red, y enviarlos
     en cada refresco multiplicaria por mil el tamano de la respuesta.
+
+    Ademas deriva SIEMPRE el nivel de inteligencia de su cobertura (longitud /
+    area del tablero), de modo que hasta los especimenes antiguos -que se
+    guardaron antes de existir el sistema de niveles- muestran el suyo.
     """
-    return {k: v for k, v in m.items() if k != "pesos"}
+    resumen = {k: v for k, v in m.items() if k != "pesos"}
+    length = resumen.get("length")
+    grid   = resumen.get("grid")
+    if isinstance(length, int) and isinstance(grid, int) and grid > 0:
+        info = ml.nivel_de_cobertura(ml.cobertura(length, grid))
+        resumen["cobertura"]      = info["cobertura"]
+        resumen["nivel"]          = info["nivel"]
+        resumen["nivel_etiqueta"] = info["etiqueta"]
+    return resumen
 
 
 def list_models():
@@ -198,15 +210,23 @@ def save_training(nombre, resultado):
     # Historico de scores: se anade SIEMPRE, aunque la tanda no batiera el record.
     # Asi la grafica del historial refleja la evolucion real del entrenamiento.
     sesiones = load_sessions(carpeta)
+    # El nivel de cada sesion es el de SU propio resultado (no el record del
+    # especimen): asi el historico muestra como fue subiendo de nivel tanda a
+    # tanda. `train` ya lo calcula; si faltara, se deriva de longitud y tablero.
+    info_sesion = ml.nivel_de_cobertura(
+        resultado.get("cobertura", ml.cobertura(int(resultado["length"]), int(resultado["grid"]))))
     sesiones.append({
-        "fecha":        ahora,
-        "generaciones": int(resultado["generaciones"]),
-        "fitness":      int(resultado["fitness"]),
-        "frutas":       int(resultado["frutas"]),
-        "pasos":        int(resultado["pasos"]),
-        "length":       int(resultado["length"]),
-        "grid":         int(resultado["grid"]),
-        "record":       int(resultado["fitness"]) >= int(modelo["fitness"]),
+        "fecha":          ahora,
+        "generaciones":   int(resultado["generaciones"]),
+        "fitness":        int(resultado["fitness"]),
+        "frutas":         int(resultado["frutas"]),
+        "pasos":          int(resultado["pasos"]),
+        "length":         int(resultado["length"]),
+        "grid":           int(resultado["grid"]),
+        "cobertura":      info_sesion["cobertura"],
+        "nivel":          info_sesion["nivel"],
+        "nivel_etiqueta": info_sesion["etiqueta"],
+        "record":         int(resultado["fitness"]) >= int(modelo["fitness"]),
     })
     _write_json(os.path.join(model_dir(carpeta), SESSIONS_FILE), sesiones)
 

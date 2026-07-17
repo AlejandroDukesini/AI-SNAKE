@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Board from '../components/Board';
-import { Panel, Title, Hint, Stat, Button, Field } from '../components/ui';
+import { Panel, Title, Hint, Stat, Button, Field, LevelBadge } from '../components/ui';
 import { api, wsURL } from '../lib/api';
 
 export default function TrainView({ theme, config, models, onSaved }) {
@@ -19,6 +19,7 @@ export default function TrainView({ theme, config, models, onSaved }) {
   const [entrenando, setEntrenando] = useState(false);
   const [snake, setSnake] = useState(null);
   const [progreso, setProgreso] = useState(null);
+  const [nivel, setNivel] = useState(null);         // {nivel, etiqueta, cobertura} en vivo
   const [log, setLog] = useState([]);
   const [estado, setEstado] = useState('Elige un nombre y entrena.');
   const wsRef = useRef(null);
@@ -49,6 +50,7 @@ export default function TrainView({ theme, config, models, onSaved }) {
     setEntrenando(true);
     setLog([]);
     setProgreso(null);
+    setNivel(null);
     setEstado('Conectando…');
 
     ws.onopen = () => {
@@ -74,12 +76,15 @@ export default function TrainView({ theme, config, models, onSaved }) {
 
       } else if (msg.type === 'gen') {
         setLog((l) => [msg, ...l]);
+        setNivel({ nivel: msg.nivel, etiqueta: msg.nivel_etiqueta, cobertura: msg.cobertura });
 
       } else if (msg.type === 'done') {
         const m = msg.model;
+        if (m.nivel != null) setNivel({ nivel: m.nivel, etiqueta: m.nivel_etiqueta, cobertura: m.cobertura });
+        const nivelTxt = m.nivel_etiqueta ? ` · ${m.nivel_etiqueta}` : '';
         setEstado(msg.continua
-          ? `${m.nombre} acumula ya ${m.generaciones} generaciones · récord ${m.fitness}`
-          : `${m.nombre} guardada en historial/${m.carpeta}/ · récord ${m.fitness}`);
+          ? `${m.nombre} acumula ya ${m.generaciones} generaciones · récord ${m.fitness}${nivelTxt}`
+          : `${m.nombre} guardada en historial/${m.carpeta}/ · récord ${m.fitness}${nivelTxt}`);
         setEntrenando(false);
         onSaved?.();
 
@@ -192,6 +197,20 @@ export default function TrainView({ theme, config, models, onSaved }) {
           <Stat label="Agente"
                 value={progreso ? `${progreso.agent}/${progreso.pop_size}` : '—'} />
           <Stat label="Tamaño actual" value={snake?.length ?? '—'} />
+        </div>
+
+        {/* Nivel de inteligencia alcanzado (ver plan.txt): sube con la cobertura. */}
+        <div className="flex items-center justify-between gap-3 bg-surface2 border
+                        border-line rounded-xl px-4 py-3 mb-4">
+          <div>
+            <div className="text-xs text-muted">Nivel de inteligencia</div>
+            <div className="text-sm text-ink mt-0.5">
+              {nivel?.etiqueta ?? 'Aún sin entrenar'}
+              {nivel?.cobertura != null &&
+                <span className="text-muted"> · cobertura {(nivel.cobertura * 100).toFixed(1)}%</span>}
+            </div>
+          </div>
+          {nivel && <LevelBadge nivel={nivel.nivel} etiqueta={nivel.etiqueta} />}
         </div>
 
         <div className="h-1.5 bg-surface2 rounded-full overflow-hidden mb-5">

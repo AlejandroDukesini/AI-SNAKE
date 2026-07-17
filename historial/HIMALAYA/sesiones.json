@@ -1,0 +1,51 @@
+[
+  {
+    "fecha": "2026-07-16 21:28:20",
+    "generaciones": 100,
+    "fitness": 36453,
+    "frutas": 36,
+    "pasos": 453,
+    "length": 39,
+    "grid": 15,
+    "record": true
+  },
+  {
+    "fecha": "2026-07-17 17:02:55",
+    "generaciones": 100,
+    "fitness": 2026,
+    "frutas": 2,
+    "pasos": 8,
+    "length": 5,
+    "grid": 15,
+    "cobertura": 0.0222,
+    "nivel": 0,
+    "nivel_etiqueta": "N0 · Supervivencia refleja",
+    "record": false
+  },
+  {
+    "fecha": "2026-07-17 17:03:27",
+    "generaciones": 100,
+    "fitness": 8273,
+    "frutas": 8,
+    "pasos": 90,
+    "length": 11,
+    "grid": 15,
+    "cobertura": 0.0489,
+    "nivel": 0,
+    "nivel_etiqueta": "N0 · Supervivencia refleja",
+    "record": false
+  },
+  {
+    "fecha": "2026-07-17 17:03:41",
+    "generaciones": 100,
+    "fitness": 2022,
+    "frutas": 2,
+    "pasos": 7,
+    "length": 5,
+    "grid": 15,
+    "cobertura": 0.0222,
+    "nivel": 0,
+    "nivel_etiqueta": "N0 · Supervivencia refleja",
+    "record": false
+  }
+]

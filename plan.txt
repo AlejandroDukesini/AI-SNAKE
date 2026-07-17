@@ -1,0 +1,172 @@
+================================================================================
+  SNAKE IA — NEUROEVOLUCION
+  PLAN DE EVOLUCION DE LA INTELIGENCIA ARTIFICIAL (hoja de ruta / vision)
+================================================================================
+  IMPORTANTE — que es este documento y que NO es:
+    - Es una PROYECCION de ingenieria: hacia donde puede crecer la IA de este
+      proyecto y que cambios tecnicos lo hacen posible.
+    - NO son resultados medidos salvo la seccion "LINEA BASE MEDIDA", que si
+      contiene numeros reales cronometrados con benchmarks/bench_core.py.
+    - Cada "nivel" es una capacidad objetivo con un criterio verificable, para
+      poder afirmar con evidencia "el agente alcanzo el Nivel N".
+
+  Arquitectura actual (referencia, ver snake_neuroevolution.py):
+    - Red feedforward 10 -> 12 -> 3 (ReLU), sin memoria.
+    - Entradas: 3 rayos (Frente/Izq/Der) x 3 rasgos (pared, cuerpo, direccion a
+      la comida) + 1 sensor propioceptivo (tamano) = 10.
+    - Algoritmo genetico: elitismo (3), seleccion por torneo (k=3), cruce
+      uniforme, mutacion gaussiana (5% por peso, std 0.20). Poblacion 25.
+    - Fitness = pasos_sobrevividos + crecimiento * 1000 (comer domina).
+
+================================================================================
+  METRICA DE VISION (la regla que mide "que tan lista es")
+================================================================================
+  Metrica principal:  COBERTURA = longitud_final / (grid * grid)   [0.0 - 1.0]
+    Es el % del tablero que el agente llega a ocupar. Un Snake perfecto tiende
+    a 1.0 (llena el tablero). Es independiente del tamano de tablero, asi que
+    permite comparar corridas de 8x8, 10x10 y 15x15.
+
+  Metricas de apoyo:
+    - Frutas / partida (media y maximo).
+    - Tasa de muerte por inanicion vs. por colision (diagnostica si "no sabe
+      buscar comida" o si "se encierra a si misma").
+    - Eficiencia = frutas / pasos (que tan poco camino desperdicia).
+    - Generaciones hasta primer fruto consistente (velocidad de aprendizaje).
+
+================================================================================
+  LINEA BASE MEDIDA (numeros REALES, no proyeccion)
+================================================================================
+  Fecha: 2026-07-17   |   Maquina del desarrollador   |   grid 8x8, pop 25
+  Herramienta: benchmarks/bench_core.py (time.perf_counter, 5 repeticiones)
+
+  --- Motor ACTUAL: red RECURRENTE 26 -> 20 -> 3 (8 rayos + espacio libre + memoria) --
+    - Generaciones / segundo ............ ~2.6
+    - Individuos evaluados / segundo .... ~66
+    - Pasos simulados (forward) / s ..... ~4.000
+    - Tiempo medio por generacion ....... ~380 ms  (p95 ~650 ms / p99 ~775 ms)
+
+  --- Referencia: motor SIMPLE anterior 10 -> 12 -> 3 (3 rayos, sin flood-fill) --
+    - Pasos simulados / s ............... ~36.500   (~9x mas rapido)
+
+  El motor actual es ~9x mas lento POR DISENO: cada paso ejecuta la red recurrente
+  mas un flood-fill del espacio alcanzable. Es el precio de la percepcion (N3) y la
+  memoria (N4). Sigue siendo de sobra interactivo (5 generaciones por defecto en
+  ~2 s; 100 gen, el maximo, en ~38 s). El cuello de botella deja de ser el algoritmo
+  y pasa a ser el COMPUTO por paso en Python puro.
+
+  TENSION REAL que conviene documentar, no esconder: el flood-fill que da la
+  inteligencia espacial es justo lo mas dificil de vectorizar. Por eso "recuperar
+  el 9x con vectorizacion" NO es un cambio de una linea: es rediseñar el simulador
+  para que N agentes avancen en paralelo con operaciones matriciales (ver Paso 3).
+
+  IMPLEMENTADO ya (antes eran proyeccion, ahora son parte del motor):
+    - Fitness shaping denso de acercamiento .......... N1/N2
+    - Mutacion adaptativa (recocido por estancamiento)  N2
+    - Vision de 8 rayos egocentricos + sensor de
+      espacio libre alcanzable (flood-fill) .......... N3 (techo elevado)
+    - Memoria recurrente (W_rec, estado oculto que
+      persiste entre turnos; nace a cero = neutra) .... N4 (mecanismo listo)
+    - Metrica de cobertura + clasificador de nivel
+      persistido por especimen y por sesion .......... (medicion de progreso)
+
+  HONESTIDAD sobre los niveles: tener el MECANISMO de un nivel (p.ej. memoria para
+  N4) no es lo mismo que ALCANZAR su cobertura. El nivel se mide del resultado real
+  de cada entrenamiento; no se declara. Un entrenamiento tipico sube hoy de N0 a
+  N2-N3. Que la memoria cuaje en planificacion (N4) es un resultado empirico que
+  depende de generaciones, poblacion y suerte evolutiva.
+
+================================================================================
+  NIVELES DE INTELIGENCIA  (escalera de capacidad + como desbloquear cada uno)
+================================================================================
+
+  --- NIVEL 0 — SUPERVIVENCIA REFLEJA ---------------------------------------
+  Capacidad:  Evita la pared un rato; come por accidente.
+  Criterio:   Cobertura < 0.10  |  frutas/partida < 2 de media.
+  Estado:     Punto de partida con pesos aleatorios (Gen 1).
+
+  --- NIVEL 1 — FORRAJEO BASICO ---------------------------------------------
+  Capacidad:  Se orienta hacia la comida usando el vector direccional que ya
+              recibe; come de forma no aleatoria.
+  Criterio:   Cobertura 0.10 - 0.20  |  frutas/partida 2 - 5.
+  Como llegar (ya soportado, solo requiere presion):
+    - Subir generaciones (30-50) y poblacion (50-100).
+    - Fitness: penalizar levemente alejarse de la comida (shaping denso) para
+      acelerar el aprendizaje del "ir hacia" en vez de esperar el golpe de
+      suerte del elitismo.
+
+  --- NIVEL 2 — FORRAJEO FIABLE + ANTI-SUICIDIO -----------------------------
+  Capacidad:  Come de forma consistente y deja de encerrarse en cuerpos cortos.
+  Criterio:   Cobertura 0.20 - 0.35  |  muertes por colision propia en caida.
+  Como llegar:
+    - Mutacion adaptativa: bajar MUTATION_STD cuando el mejor fitness se estanca
+      (recocido) para afinar en vez de saltar al azar.
+    - Elitismo un poco mayor + torneo k=4/5 para conservar buen material.
+    - Curriculum: entrenar primero en 8x8 y transferir a 10x10 (los sensores ya
+      estan normalizados por el tablero, la transferencia es directa).
+
+  --- NIVEL 3 — CONCIENCIA ESPACIAL -----------------------------------------
+  Capacidad:  Con cuerpo largo, planifica giros para no atraparse; empieza a
+              "rodear" la comida.
+  Criterio:   Cobertura 0.35 - 0.55.
+  Cuello de botella real: 3 rayos NO bastan para ver el tablero. Aqui el
+  proyecto necesita mas VISION, no solo mas generaciones.
+  Como llegar (cambios de arquitectura):
+    - Ampliar sensores: 8 direcciones en vez de 3 (rayos en diagonales), o una
+      rejilla local NxN centrada en la cabeza. Esto sube N_INPUTS y exige
+      reentrenar, pero rompe el techo del Nivel 2.
+    - Anadir sensor de "espacio libre alcanzable" (flood-fill barato) como
+      entrada: es la senal que evita quedarse sin salida.
+
+  --- NIVEL 4 — PLANIFICACION EMERGENTE -------------------------------------
+  Capacidad:  Recorre el tablero de forma eficiente; llena buena parte sin
+              encerrarse. Comportamiento tipo "camino seguro".
+  Criterio:   Cobertura 0.55 - 0.80.
+  Como llegar:
+    - Memoria: pasar de feedforward puro a una red RECURRENTE (un estado oculto
+      que persiste entre pasos) para "recordar" por donde venia.
+    - Neuroevolucion topologica (estilo NEAT): que la evolucion cree/pode
+      conexiones y neuronas, no solo ajuste pesos de una topologia fija.
+    - Fitness multiobjetivo: cobertura + eficiencia, con penalizacion por
+      metros desperdiciados.
+
+  --- NIVEL 5 — CASI OPTIMO -------------------------------------------------
+  Capacidad:  Llena casi todo el tablero; se aproxima a una estrategia tipo
+              ciclo hamiltoniano aprendido, no cableado.
+  Criterio:   Cobertura > 0.80 de media, con maximos cerca de 1.0.
+  Como llegar (I+D):
+    - Vision global del tablero via red convolucional (CNN) sobre la rejilla
+      completa como imagen de canales (cuerpo / comida / cabeza).
+    - Speciacion + nichos para mantener diversidad y no colapsar en un optimo
+      local pobre.
+    - Evaluacion por lotes VECTORIZADA en NumPy (simular N agentes a la vez con
+      operaciones matriciales) para poder permitirse poblaciones de miles sin
+      perder el presupuesto de computo — la linea base ya deja margen enorme.
+
+================================================================================
+  EJES DE MEJORA TRANSVERSALES (aplican a varios niveles)
+================================================================================
+  1) SENSORIAL      3 rayos -> 8 rayos -> rejilla local -> tablero completo (CNN)
+  2) MODELO         feedforward -> recurrente -> topologia evolutiva (NEAT)
+  3) EVOLUCION      mutacion fija -> adaptativa -> speciacion/nichos/multiobjetivo
+  4) FITNESS        escaso (solo comer) -> shaping denso -> multiobjetivo
+  5) COMPUTO        1 agente por vez -> lotes vectorizados NumPy -> multiproceso
+  6) CURRICULUM     tablero fijo -> pequeno->grande -> aleatorizacion de tablero
+
+================================================================================
+  ORDEN RECOMENDADO DE TRABAJO (mayor retorno primero)
+================================================================================
+  [HECHO] Paso 1: COBERTURA como metrica de primera clase (guardada por sesion y
+          por especimen en storage.py). Sin metrica no hay progreso demostrable.
+  [HECHO] Paso 2: Fitness shaping denso + mutacion adaptativa  -> N1/N2 "gratis"
+          (sin tocar arquitectura).
+  [HECHO] Paso 4: Ampliar sensores (8 rayos + espacio libre)  -> rompe el techo
+          del forrajeo -> N3. (Se adelanto al Paso 3 por su alto retorno.)
+  [HECHO] Paso 5a: Memoria RECURRENTE (W_rec) -> mecanismo de N4. Falta la parte
+          topologica (NEAT: crear/podar conexiones), que queda como I+D.
+  --- pendiente ---
+  Paso 3: Evaluacion vectorizada por lotes (rediseño del simulador en NumPy) ->
+          poblaciones grandes sin coste y recupera el ~9x de la percepcion rica.
+  Paso 5b: Neuroevolucion topologica (NEAT) -> afina N4.
+  Paso 6: Vision CNN del tablero completo -> N5 (linea de I+D; alcanzar >80% de
+          cobertura es un resultado de entrenamiento, no de codigo).
+================================================================================
