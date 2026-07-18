@@ -39,6 +39,18 @@ export default function TrainView({ theme, config, models, onSaved }) {
     return () => clearTimeout(t);
   }, [nombre]);
 
+  /* Al elegir una IA que ya existe se muestra SU nivel guardado, sin necesidad
+     de entrenarla: deja claro que su entrenamiento se conserva. Si es un nombre
+     nuevo (y no se esta entrenando) no hay nivel todavia. */
+  useEffect(() => {
+    if (existente) {
+      setNivel({ nivel: existente.nivel, etiqueta: existente.nivel_etiqueta,
+                 cobertura: existente.cobertura });
+    } else if (!entrenando) {
+      setNivel(null);
+    }
+  }, [existente, entrenando]);
+
   // Al desmontar hay que cerrar el socket, o el entrenamiento seguiria
   // quemando CPU en el servidor con la vista ya cerrada.
   useEffect(() => () => wsRef.current?.close(), []);
@@ -50,7 +62,8 @@ export default function TrainView({ theme, config, models, onSaved }) {
     setEntrenando(true);
     setLog([]);
     setProgreso(null);
-    setNivel(null);
+    // El nivel NO se borra: si la IA ya existe se mantiene su nivel guardado
+    // visible durante la tanda (solo puede subir, nunca baja).
     setEstado('Conectando…');
 
     ws.onopen = () => {
@@ -114,7 +127,11 @@ export default function TrainView({ theme, config, models, onSaved }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,560px)_1fr] items-start">
-      <Board snake={snake} grid={config.grid} theme={theme} />
+      {/* Mismo limite responsivo que en Jugar: el tablero cuadrado nunca debe
+          desbordar el alto del dispositivo (ver PlayView). */}
+      <div className="w-full max-w-[min(100%,calc(100svh-13rem))] mx-auto">
+        <Board snake={snake} grid={config.grid} theme={theme} />
+      </div>
 
       <Panel>
         <Title>Entrenar IA</Title>

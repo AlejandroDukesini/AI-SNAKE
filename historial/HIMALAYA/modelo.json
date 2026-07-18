@@ -2,8 +2,8 @@
   "carpeta": "HIMALAYA",
   "nombre": "HIMALAYA",
   "fecha_creacion": "2026-07-16 21:28:20",
-  "fecha_actualizacion": "2026-07-17 17:03:41",
-  "generaciones": 400,
+  "fecha_actualizacion": "2026-07-17 22:53:56",
+  "generaciones": 1100,
   "fitness": 36453,
   "frutas": 36,
   "pasos": 453,
@@ -220,5 +220,6 @@
       -0.006844503275514592,
       -0.2800330914384793
     ]
-  }
+  },
+  "record_cobertura": 0.1067
 }

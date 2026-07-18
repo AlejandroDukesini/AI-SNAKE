@@ -88,7 +88,11 @@ export default function PlayView({ theme, grid }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,560px)_1fr] items-start">
-      <div className="relative">
+      {/* El tablero es cuadrado: si su lado supera el alto util del dispositivo
+          se salia por abajo. Se limita el ancho al menor entre el hueco y el
+          alto libre de pantalla, y se centra: asi cabe entero en cualquier
+          movil (incluido 15x15) y el overlay de la cuenta atras queda alineado. */}
+      <div className="relative w-full max-w-[min(100%,calc(100svh-13rem))] mx-auto">
         <Board snake={snake} grid={grid} theme={theme} />
 
         {cuenta !== null && (

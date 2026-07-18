@@ -87,6 +87,10 @@ class FavoriteIn(BaseModel):
     favorito: bool
 
 
+class RenameIn(BaseModel):
+    nombre: str
+
+
 @app.get("/api/models")
 def get_models(favorites: bool = False):
     """Lista los especimenes guardados, sin los pesos de la red."""
@@ -126,6 +130,21 @@ def put_favorite(carpeta: str, body: FavoriteIn):
     resumen = storage.set_favorite(storage.slugify(carpeta), body.favorito)
     if resumen is None:
         raise HTTPException(status_code=404, detail="Especimen no encontrado")
+    return {"model": resumen}
+
+
+@app.patch("/api/models/{carpeta}")
+def patch_model(carpeta: str, body: RenameIn):
+    """Renombra un especimen sin perder su entrenamiento. Si el nombre nuevo
+    choca con otra carpeta existente se rechaza (409): fusionar dos linajes
+    borraria el aprendizaje de uno de ellos."""
+    resumen, error = storage.rename_model(storage.slugify(carpeta), body.nombre)
+    if error == "no_encontrado":
+        raise HTTPException(status_code=404, detail="Especimen no encontrado")
+    if error == "nombre_vacio":
+        raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
+    if error == "ya_existe":
+        raise HTTPException(status_code=409, detail="Ya existe una IA con ese nombre")
     return {"model": resumen}
 
 

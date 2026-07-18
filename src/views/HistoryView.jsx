@@ -45,7 +45,7 @@ function Sparkline({ sesiones }) {
   );
 }
 
-function ModelRow({ m, index, onProbar, onFavorito, onBorrar }) {
+function ModelRow({ m, index, onProbar, onFavorito, onRenombrar, onBorrar }) {
   return (
     <div className="flex items-center gap-4 bg-surface border border-line
                     rounded-panel px-5 py-4">
@@ -85,6 +85,7 @@ function ModelRow({ m, index, onProbar, onFavorito, onBorrar }) {
 
       <div className="flex gap-2">
         <IconButton label="Probar esta IA" onClick={() => onProbar(m)}>▶</IconButton>
+        <IconButton label="Renombrar esta IA" onClick={() => onRenombrar(m)}>✎</IconButton>
         <IconButton label="Borrar espécimen" onClick={() => onBorrar(m)}
                     className="hover:!bg-danger hover:!border-danger hover:!text-on-danger">
           🗑
@@ -100,6 +101,9 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
   const [borrar, setBorrar] = useState(null);
   const [vaciar, setVaciar] = useState(false);
   const [soloFavoritos, setSoloFavoritos] = useState(false);
+  const [renombrar, setRenombrar] = useState(null);   // Especimen que se renombra
+  const [nuevoNombre, setNuevoNombre] = useState('');
+  const [errorNombre, setErrorNombre] = useState(null);
 
   const onDemo = useCallback((msg) => {
     if (msg.type === 'state') setDemoSnake(msg.snake);
@@ -112,6 +116,25 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
   const favorito = async (m) => {
     await api.setFavorite(m.carpeta, !m.favorito);
     onChanged();
+  };
+
+  const abrirRenombrar = (m) => {
+    setNuevoNombre(m.nombre);
+    setErrorNombre(null);
+    setRenombrar(m);
+  };
+
+  const confirmarRenombrado = async () => {
+    const nombre = nuevoNombre.trim();
+    if (!nombre) { setErrorNombre('Escribe un nombre.'); return; }
+    if (nombre === renombrar.nombre) { setRenombrar(null); return; }
+    try {
+      await api.renameModel(renombrar.carpeta, nombre);
+      setRenombrar(null);
+      onChanged();
+    } catch (e) {
+      setErrorNombre(e.message);
+    }
   };
 
   const confirmarBorrado = async () => {
@@ -161,7 +184,8 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
           {visibles.map((m, i) => (
             <ModelRow key={m.carpeta} m={m} index={i}
                       onProbar={(x) => { setDemoSnake(null); setProbando(x); }}
-                      onFavorito={favorito} onBorrar={setBorrar} />
+                      onFavorito={favorito} onRenombrar={abrirRenombrar}
+                      onBorrar={setBorrar} />
           ))}
         </div>
       )}
@@ -180,6 +204,31 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
         </div>
         <div className="flex justify-end">
           <Button onClick={() => setProbando(null)}>Cerrar</Button>
+        </div>
+      </Modal>
+
+      {/* --- Renombrar --- */}
+      <Modal open={!!renombrar} onClose={() => setRenombrar(null)}
+             title="Renombrar IA">
+        <Hint className="mb-4">
+          Cambia el nombre de <b className="text-ink">{renombrar?.nombre}</b> sin
+          perder su entrenamiento: conserva sus generaciones, su récord y su nivel.
+        </Hint>
+        <input
+          type="text"
+          value={nuevoNombre}
+          autoFocus
+          maxLength={40}
+          onChange={(e) => { setNuevoNombre(e.target.value); setErrorNombre(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') confirmarRenombrado(); }}
+          className="w-full bg-surface2 border border-line rounded-xl px-4 py-2.5
+                     text-ink placeholder:text-muted focus:outline-2
+                     focus:outline-offset-2 focus:outline-accent"
+        />
+        {errorNombre && <p className="text-xs text-danger mt-2">{errorNombre}</p>}
+        <div className="flex justify-end gap-2 mt-5">
+          <Button onClick={() => setRenombrar(null)}>Cancelar</Button>
+          <Button variant="primary" onClick={confirmarRenombrado}>Guardar nombre</Button>
         </div>
       </Modal>
 

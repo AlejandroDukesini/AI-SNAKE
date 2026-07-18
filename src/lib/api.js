@@ -39,6 +39,11 @@ export const api = {
   setFavorite: (carpeta, favorito) =>
     req(`/api/models/${encodeURIComponent(carpeta)}/favorite`, json('PUT', { favorito })),
 
+  /* Renombra una IA sin perder su entrenamiento. El servidor mueve la carpeta
+     si el nombre nuevo cambia el slug; devuelve 409 si ya existe otra igual. */
+  renameModel: (carpeta, nombre) =>
+    req(`/api/models/${encodeURIComponent(carpeta)}`, json('PATCH', { nombre })),
+
   deleteModel: (carpeta) =>
     req(`/api/models/${encodeURIComponent(carpeta)}`, { method: 'DELETE' }),
 

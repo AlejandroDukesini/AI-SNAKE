@@ -134,13 +134,23 @@ def model_summary(m):
     guardaron antes de existir el sistema de niveles- muestran el suyo.
     """
     resumen = {k: v for k, v in m.items() if k != "pesos"}
-    length = resumen.get("length")
-    grid   = resumen.get("grid")
-    if isinstance(length, int) and isinstance(grid, int) and grid > 0:
-        info = ml.nivel_de_cobertura(ml.cobertura(length, grid))
+    # El nivel sale de la mejor cobertura alcanzada JAMAS (`record_cobertura`),
+    # que solo crece. Los especimenes antiguos no la tienen guardada: para ellos
+    # se deriva de su longitud y tablero de record, como se hacia antes.
+    rec = m.get("record_cobertura")
+    if isinstance(rec, (int, float)):
+        info = ml.nivel_de_cobertura(float(rec))
         resumen["cobertura"]      = info["cobertura"]
         resumen["nivel"]          = info["nivel"]
         resumen["nivel_etiqueta"] = info["etiqueta"]
+    else:
+        length = resumen.get("length")
+        grid   = resumen.get("grid")
+        if isinstance(length, int) and isinstance(grid, int) and grid > 0:
+            info = ml.nivel_de_cobertura(ml.cobertura(length, grid))
+            resumen["cobertura"]      = info["cobertura"]
+            resumen["nivel"]          = info["nivel"]
+            resumen["nivel_etiqueta"] = info["etiqueta"]
     return resumen
 
 
@@ -205,6 +215,15 @@ def save_training(nombre, resultado):
             modelo["grid"]    = int(resultado["grid"])
             modelo["pesos"]   = resultado["brain"].to_dict()
 
+    # Nivel de inteligencia PERSISTENTE y MONOTONO: se guarda la mejor cobertura
+    # que la IA haya alcanzado JAMAS (no la de la ultima tanda). Asi el nivel de
+    # ZEUS solo sube -o se mantiene- entrenamiento a entrenamiento, hasta su tope,
+    # y una corrida con mala suerte nunca le baja el nivel ya conseguido. La
+    # cobertura es una fraccion, asi que compara de forma justa 8x8, 10x10 y 15x15.
+    cob_ahora = float(resultado.get(
+        "cobertura", ml.cobertura(int(resultado["length"]), int(resultado["grid"]))))
+    modelo["record_cobertura"] = max(float(modelo.get("record_cobertura", 0.0)), cob_ahora)
+
     _write_json(os.path.join(model_dir(carpeta), MODEL_FILE), modelo)
 
     # Historico de scores: se anade SIEMPRE, aunque la tanda no batiera el record.
@@ -233,6 +252,42 @@ def save_training(nombre, resultado):
     resumen = model_summary(modelo)
     resumen["sesiones"] = sesiones
     return resumen
+
+
+def rename_model(carpeta, nuevo_nombre):
+    """Renombra un especimen conservando TODO lo aprendido (pesos, generaciones,
+    historico y nivel). Cambia su nombre visible y, si el slug resultante cambia,
+    mueve su carpeta a la nueva ruta.
+
+    Como la carpeta ES la identidad del especimen, renombrar a un slug que ya
+    pertenece a otro especimen se rechaza: seria fusionar dos linajes distintos.
+
+    Devuelve (resumen, error). `error` es None si todo fue bien, o un codigo:
+    'no_encontrado', 'nombre_vacio', 'ya_existe'.
+    """
+    modelo = load_model(carpeta)
+    if modelo is None:
+        return None, "no_encontrado"
+
+    nombre_limpio = str(nuevo_nombre or "").strip()[:40]
+    if not nombre_limpio:
+        return None, "nombre_vacio"
+
+    nuevo_slug = slugify(nombre_limpio)
+    if nuevo_slug != carpeta and os.path.exists(model_dir(nuevo_slug)):
+        return None, "ya_existe"
+
+    modelo["nombre"] = nombre_limpio
+    modelo["fecha_actualizacion"] = _now()
+
+    if nuevo_slug != carpeta:
+        # Mover la carpeta entera (con pesos e historico) al nuevo slug.
+        os.rename(model_dir(carpeta), model_dir(nuevo_slug))
+        modelo["carpeta"] = nuevo_slug
+        carpeta = nuevo_slug
+
+    _write_json(os.path.join(model_dir(carpeta), MODEL_FILE), modelo)
+    return model_summary(modelo), None
 
 
 def set_favorite(carpeta, favorito):
