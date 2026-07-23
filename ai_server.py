@@ -48,6 +48,21 @@ app = FastAPI(title="Snake IA - Neuroevolucion")
 
 
 # =============================================================================
+#  HEALTH CHECK
+# =============================================================================
+#  Los hosts (Render, Railway, Fly.io) sondean una ruta para saber si el
+#  servicio esta vivo, y muchos lo hacen con HEAD, no con GET. Una ruta que solo
+#  acepte GET devuelve 405 Method Not Allowed y el host marca el deploy como
+#  caido. Por eso se acepta GET y HEAD explicitamente, y existe SIEMPRE (aunque
+#  no haya `dist/` compilado), para no depender de la web para el chequeo.
+# =============================================================================
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health():
+    """Liveness probe: 200 OK en cuanto el proceso esta en pie."""
+    return {"status": "ok"}
+
+
+# =============================================================================
 #  API REST: CONFIGURACION
 # =============================================================================
 class ConfigIn(BaseModel):
@@ -395,9 +410,14 @@ if os.path.isdir(DIST_DIR):
     app.mount("/assets", StaticFiles(directory=os.path.join(DIST_DIR, "assets")),
               name="assets")
 
-    @app.get("/")
+    @app.api_route("/", methods=["GET", "HEAD"])
     def index():
-        """Sirve la aplicacion React compilada."""
+        """Sirve la aplicacion React compilada.
+
+        Acepta HEAD ademas de GET: algunos hosts usan `/` como health check con
+        una peticion HEAD, y sin ella responderia 405. Con FileResponse, HEAD
+        devuelve las cabeceras sin cuerpo automaticamente.
+        """
         return FileResponse(os.path.join(DIST_DIR, "index.html"))
 
 

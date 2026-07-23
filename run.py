@@ -130,13 +130,20 @@ def comprobar_dependencias(prod):
     return True
 
 
-def lanzar_api():
-    """Arranca el servidor de la IA (uvicorn) como proceso hijo."""
+def lanzar_api(host):
+    """Arranca el servidor de la IA (uvicorn) como proceso hijo.
+
+    En produccion se ata a `0.0.0.0` (todas las interfaces): hosts como Render,
+    Railway o Fly.io levantan el proceso dentro de un contenedor y comprueban el
+    puerto desde FUERA. Atado a `127.0.0.1` el puerto solo seria visible dentro
+    del contenedor y el host reportaria "no open ports detected". En desarrollo
+    basta con `127.0.0.1`, que ademas no expone el servidor a la red local.
+    """
     # `sys.executable` en vez de "python": asi se usa el MISMO interprete que
     # ejecuta run.py, que es el que tiene numpy y fastapi instalados.
     cmd = [sys.executable, "-m", "uvicorn", "ai_server:app",
-           "--host", "127.0.0.1", "--port", str(API_PORT)]
-    log("orquestador", f"IA        -> http://127.0.0.1:{API_PORT}")
+           "--host", host, "--port", str(API_PORT)]
+    log("orquestador", f"IA        -> http://{host}:{API_PORT}")
     return subprocess.Popen(cmd, cwd=SCRIPT_DIR)
 
 
@@ -227,10 +234,11 @@ def main():
         signal.signal(signal.SIGBREAK, salir)
 
     if prod:
-        log("orquestador", f"Sirviendo la web compilada en http://127.0.0.1:{API_PORT}")
-        procesos.append(lanzar_api())
+        # 0.0.0.0 para que el hosting (Render, Railway, Fly.io) detecte el puerto.
+        log("orquestador", f"Sirviendo la web compilada en 0.0.0.0:{API_PORT}")
+        procesos.append(lanzar_api("0.0.0.0"))
     else:
-        procesos.append(lanzar_api())
+        procesos.append(lanzar_api("127.0.0.1"))
         time.sleep(1.0)          # Margen para que uvicorn ate el puerto
         procesos.append(lanzar_vite())
         print()

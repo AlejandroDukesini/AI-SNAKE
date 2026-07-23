@@ -16,6 +16,13 @@ por WebSocket. Un solo comando para todo.
   <img alt="Lighthouse desktop 100" src="https://img.shields.io/badge/Lighthouse_desktop-100-0CCE6B?logo=lighthouse&logoColor=white">
 </p>
 
+<p>
+  <a href="https://ia-snake.netlify.app/"><img alt="Netlify" src="https://img.shields.io/badge/Netlify-en_vivo-00C7B7?logo=netlify&logoColor=white"></a>
+  <a href="https://ai-snake-nine.vercel.app/"><img alt="Vercel" src="https://img.shields.io/badge/Vercel-en_vivo-000000?logo=vercel&logoColor=white"></a>
+</p>
+
+> **🌐 Demos en vivo:** [ia-snake.netlify.app](https://ia-snake.netlify.app/) · [ai-snake-nine.vercel.app](https://ai-snake-nine.vercel.app/)
+
 ---
 
 ## ▶️ Arranque
@@ -289,8 +296,20 @@ npm start         # un solo proceso Python sirviendo web + IA
 En producción `run.py --prod` **no levanta Vite**: `ai_server.py` detecta `dist/` y sirve la
 web él mismo. Un proceso, un puerto (`$PORT` o 8000).
 
-Dos cosas antes de publicarlo:
+### Desplegado en
 
+| Plataforma | Enlace |
+| --- | --- |
+| **Netlify** | <https://ia-snake.netlify.app/> |
+| **Vercel** | <https://ai-snake-nine.vercel.app/> |
+
+Tres cosas antes de publicarlo:
+
+- **Escucha en `0.0.0.0` y lee `$PORT`.** En producción `run.py --prod` ata uvicorn a
+  `0.0.0.0` (no a `127.0.0.1`) y toma el puerto de la variable `$PORT`. Es lo que necesitan
+  Render, Railway o Fly.io para **detectar el puerto abierto** desde fuera del contenedor.
+- **Health check sin 405.** Hay un endpoint `/health` (y `/` acepta `HEAD` además de `GET`),
+  así que el sondeo del host responde **200 OK** en vez de *405 Method Not Allowed*.
 - **Necesita WebSockets.** El juego y el entrenamiento van por WS; un hosting estático
   (GitHub Pages) no sirve. Render, Railway o Fly.io sí.
 - **El estado es una carpeta, no una base de datos.** `historial/` es compartido por todos los
