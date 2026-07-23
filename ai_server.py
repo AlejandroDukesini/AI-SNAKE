@@ -28,6 +28,7 @@ import asyncio
 import threading
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -45,6 +46,41 @@ FPS_PLAY   = 12      # Velocidad jugable (manual y demo)
 STREAM_FPS = 20      # Refrescos por segundo enviados durante el entrenamiento
 
 app = FastAPI(title="Snake IA - Neuroevolucion")
+
+
+# =============================================================================
+#  CORS
+# =============================================================================
+#  En un despliegue MONOLITICO (Render sirviendo web + API) el frontend y la API
+#  comparten origen y CORS no interviene. Pero en un despliegue PARTIDO (frontend
+#  en Vercel/Netlify, backend en Render) el navegador ve dos origenes distintos y
+#  bloquea las peticiones salvo que el backend las autorice con estas cabeceras.
+#
+#  Se listan los origenes conocidos en vez de "*": es lo justo y suficiente, y no
+#  necesitamos comodin porque el consentimiento y el estado no viajan por cookie,
+#  sino en localStorage (por eso allow_credentials queda en False). Para las
+#  previews de Vercel (URLs con hash cambiante) se usa un regex aparte.
+#
+#  Si en algun momento prefieres abrir del todo, sustituye allow_origins por
+#  ["*"] y borra allow_origin_regex (son incompatibles con allow_credentials=True,
+#  pero aqui no lo usamos).
+# =============================================================================
+ORIGENES_PERMITIDOS = [
+    "https://ia-snake.netlify.app",       # Netlify (produccion)
+    "https://ai-snake-nine.vercel.app",   # Vercel (produccion)
+    "http://localhost:5173",              # Vite en desarrollo
+    "http://127.0.0.1:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ORIGENES_PERMITIDOS,
+    # Previews de Vercel: https://<rama-hash>-<proyecto>.vercel.app
+    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # =============================================================================

@@ -9,6 +9,11 @@
 
    El callback se guarda en una ref: asi puede cambiar en cada render sin
    provocar una reconexion, que es el bug clasico de los WebSocket en React.
+
+   La URL de conexion la resuelve `wsURL` (ver lib/api.js): usa VITE_BACKEND_URL
+   si esta definida (despliegue partido: frontend en Vercel, backend en Render,
+   convirtiendo http(s):// en ws(s)://) y, si no, la deriva de window.location
+   para el desarrollo local y el despliegue monolitico.
    ============================================================================ */
 
 import { useEffect, useRef, useCallback } from 'react';
