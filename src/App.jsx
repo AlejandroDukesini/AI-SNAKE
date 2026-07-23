@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './lib/api';
+import { openPreferences } from './lib/consent';
 import PlayView from './views/PlayView';
 import TrainView from './views/TrainView';
 import HistoryView from './views/HistoryView';
@@ -135,6 +136,18 @@ export default function App() {
                         onChange={cambiarConfig} />
           )}
         </main>
+
+        <footer className="mt-12 pt-6 border-t border-line text-center">
+          <button
+            type="button"
+            onClick={openPreferences}
+            className="text-xs text-muted hover:text-ink underline underline-offset-4
+                       transition focus-visible:outline-2 focus-visible:outline-offset-2
+                       focus-visible:outline-accent rounded"
+          >
+            Preferencias de cookies
+          </button>
+        </footer>
       </div>
     </div>
   );
