@@ -126,3 +126,23 @@ body {
 }
 
 .animate-modal { animation: modalIn .18s ease-out; }
+
+/* Visualizador de la red (Crear IA): una onda de activacion que recorre las
+   capas de izquierda a derecha. Los nodos laten desfasados por capa (nodeGlow)
+   y un pulso viaja por cada conexion (flowDot), representando el flujo de datos.
+   Ambas respetan prefers-reduced-motion por la regla global de arriba. */
+@keyframes nodeGlow {
+  0%, 100% { opacity: .25; transform: scale(1); }
+  50%      { opacity: 1;  transform: scale(1.4); }
+}
+
+.node-glow { animation: nodeGlow 1.8s ease-in-out infinite; }
+
+@keyframes flowDot {
+  0%   { left: 0;    opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+.flow-dot { animation: flowDot 1.8s linear infinite; }

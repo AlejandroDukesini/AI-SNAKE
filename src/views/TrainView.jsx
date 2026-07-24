@@ -46,8 +46,10 @@ function duracion(ms) {
 }
 
 export default function TrainView({ theme, config, limits = {}, engines = [],
-                                   defaultEngine, models, onSaved }) {
-  const [nombre, setNombre] = useState('');
+                                   defaultEngine, models, onSaved, initialName = '' }) {
+  // `initialName` lo rellena «Crear IA» al pasar el testigo aquí; en el uso normal
+  // llega vacío. Solo siembra el valor inicial: el campo sigue siendo editable.
+  const [nombre, setNombre] = useState(initialName);
   const [generaciones, setGeneraciones] = useState(config.generations);
   const [existente, setExistente] = useState(null);   // Modelo si el nombre ya existe
   const [entrenando, setEntrenando] = useState(false);

@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from './lib/api';
 import { openPreferences } from './lib/consent';
 import PlayView from './views/PlayView';
-import TrainView from './views/TrainView';
+import AIManagerView from './views/AIManagerView';
 import HistoryView from './views/HistoryView';
 import ConfigView from './views/ConfigView';
 import DocsView from './views/DocsView';
@@ -127,9 +127,9 @@ export default function App() {
         <main>
           {vista === 'play' && <PlayView theme={config.theme} grid={config.grid} />}
           {vista === 'train' && (
-            <TrainView theme={config.theme} config={config} limits={meta.limits}
-                       engines={meta.engines} defaultEngine={meta.defaultEngine}
-                       models={models} onSaved={cargarModels} />
+            <AIManagerView theme={config.theme} config={config} limits={meta.limits}
+                           engines={meta.engines} defaultEngine={meta.defaultEngine}
+                           models={models} onSaved={cargarModels} />
           )}
           {vista === 'history' && (
             <HistoryView theme={config.theme} grid={config.grid} models={models}

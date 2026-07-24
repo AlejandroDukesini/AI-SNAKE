@@ -123,100 +123,217 @@ const ENTRADAS = [
   },
 ];
 
-/* Los 3 motores de red seleccionables. Mismos 26 sensores y misma acción de
-   salida (recto/izq/der); solo cambia la topología interna y su coste. */
-const MOTORES = [
-  {
-    id: 'advanced', label: 'Advanced', arch: '26 → 32 → 16 → 3',
-    enfoque: 'Deep learning eficiente',
-    detalle: 'Dos capas ocultas (ReLU) que comprimen la percepción en rasgos de ' +
-      'alto nivel ("hay un callejón a mi izquierda"). Más abstracción espacial para ' +
-      'no encerrarse cuando es larga; converge en menos generaciones.',
-    cpu: 'Media-alta', adn: '≈ 1.400 pesos', muta: 'Rápida', salida: 'argmax de 3',
+/* ---------------------------------------------------------------------------
+   Los motores de red REALES del proyecto (los tres que de verdad corren en
+   snake_neuroevolution.py). Todos comparten los 26 sensores y el algoritmo
+   genético: lo que cambia es la topología del cerebro y cómo su salida se
+   traduce en un giro, y eso hace que cada uno APRENDA distinto.
+
+   Estructura extensible: para documentar un motor nuevo basta con añadir una
+   entrada aquí (su `layers`, `salida`, cifras y explicación); el selector, el
+   diagrama y la ficha se generan solos, sin tocar el JSX. `orden` fija la
+   posición en el selector.
+   --------------------------------------------------------------------------- */
+const MOTORES = {
+  intermated: {
+    orden: 1,
+    label: 'RNN Recurrente (NumPy)',
+    arch: '26 → 20 → 3',
+    layers: [26, 20, 3],
+    recurrente: true,
+    enfoque: 'Algoritmo genético clásico · motor por defecto',
+    salida: 'argmax de 3 · recto / izquierda / derecha',
+    pesos: '≈ 1.003',
+    cpu: 'Baja',
+    muta: 'Muy eficiente',
+    aprende:
+      'Aprende con MEMORIA intra-partida: la capa oculta se realimenta con su ' +
+      'estado del turno anterior (W_rec), así "recuerda por dónde venía". Su ADN ' +
+      'compacto reduce el espacio de búsqueda, de modo que el genético converge ' +
+      'con pocas evaluaciones y muy poca CPU. Es el único con especímenes previos.',
+    codigo:
+`# La capa oculta ve la entrada Y su propio estado anterior (memoria)
+h = relu(W1 @ x + b1 + W_rec @ h_prev)
+o = W2 @ h + b2
+acción = argmax(o)          # recto | izquierda | derecha`,
   },
-  {
-    id: 'intermated', label: 'Intermated', arch: '26 → 20 → 3',
-    enfoque: 'Algoritmo genético clásico · por defecto',
-    detalle: 'Red recurrente compacta: la capa oculta se realimenta (W_rec = memoria ' +
-      'intra-partida). ADN pequeño que reduce el espacio de búsqueda del GA y aprende ' +
-      'con muy poca CPU. Es el motor de siempre y el único con especímenes previos.',
-    cpu: 'Baja', adn: '≈ 1.000 pesos', muta: 'Muy eficiente', salida: 'argmax de 3',
+  advanced: {
+    orden: 2,
+    label: 'Compact FF (NumPy)',
+    arch: '26 → 16 → 3',
+    layers: [26, 16, 3],
+    recurrente: false,
+    enfoque: 'Feedforward compacto · 1 capa oculta',
+    salida: 'argmax de 3 · recto / izquierda / derecha',
+    pesos: '≈ 483',
+    cpu: 'Baja-media',
+    muta: 'Rápida (espacio de búsqueda pequeño)',
+    aprende:
+      'Una SOLA capa oculta (LeakyReLU). En neuroevolución la profundidad estorba: ' +
+      'cada capa extra agranda el espacio de búsqueda y la mutación compone ruido ' +
+      'capa a capa, así que una red profunda evoluciona más lento y peor en tiempo ' +
+      'limitado. Compacta = más evaluaciones/segundo y convergencia antes; LeakyReLU ' +
+      'evita neuronas muertas.',
+    codigo:
+`h = leaky_relu(W1 @ x + b1)   # 16 neuronas
+o = W2 @ h + b2               # 3 salidas
+acción = argmax(o)            # recto | izq | der`,
   },
-  {
-    id: 'basic', label: 'Basic', arch: '26 → 52 → 26 → 1',
+  basic: {
+    orden: 3,
+    label: 'Wide FF (NumPy)',
+    arch: '26 → 52 → 26 → 1',
+    layers: [26, 52, 26, 1],
+    recurrente: false,
     enfoque: 'Teórico / expansivo',
-    detalle: 'La primera capa oculta duplica la entrada (regla clásica). Una sola ' +
-      'salida decide el giro por rangos: <1/3 izquierda · medio recto · >2/3 derecha. ' +
-      'Máxima expresividad, pero un espacio de búsqueda enorme para el GA.',
-    cpu: 'Alta', adn: '≈ 2.800 pesos', muta: 'Lenta', salida: '1 valor por rangos',
+    salida: '1 valor por rangos · <1/3 izq · medio recto · >2/3 der',
+    pesos: '≈ 2.809',
+    cpu: 'Alta',
+    muta: 'Lenta (más genes que ajustar)',
+    aprende:
+      'Sigue la regla teórica de que la primera capa oculta DUPLICA la entrada. ' +
+      'Con una sola salida, decide el giro por rangos sobre su valor aplastado a ' +
+      '[0,1]. Máxima expresividad, pero un espacio de búsqueda enorme: el genético ' +
+      'tarda más en afinar. Útil como referencia teórica frente a los otros dos.',
+    codigo:
+`h1 = relu(W1 @ x  + b1)          # 52 = el doble de la entrada
+h2 = relu(W2 @ h1 + b2)          # 26
+v  = sigmoide(W3 @ h2 + b3)      # UNA salida -> [0, 1]
+acción = izq si v<1/3, der si v>2/3, si no recto`,
   },
-];
+};
+
+const MOTORES_ORDENADOS = Object.entries(MOTORES)
+  .map(([id, m]) => ({ id, ...m }))
+  .sort((a, b) => a.orden - b.orden);
+
+/* Diagrama de la red del motor activo. Dibuja una columna de nodos por capa a
+   partir de `layers`, así que se redibuja solo al cambiar de motor. */
+function NetworkDiagram({ layers, recurrente }) {
+  const etiqueta = (i) =>
+    i === 0 ? 'Entrada' : i === layers.length - 1 ? 'Salida' : `Oculta ${i}`;
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-1 overflow-x-auto py-1">
+        {layers.map((n, i) => (
+          <div key={i} className="flex items-center gap-1 shrink-0">
+            <div className="flex flex-col items-center gap-1 min-w-[56px]">
+              <div className="text-xl font-semibold tabular-nums text-accent">{n}</div>
+              <div className="flex flex-col gap-1">
+                {Array.from({ length: Math.min(n, 5) }).map((_, k) => (
+                  <span key={k} className="w-2 h-2 rounded-full bg-accent/40" />
+                ))}
+                {n > 5 && <span className="text-[10px] text-muted leading-none">⋮</span>}
+              </div>
+              <div className="text-[11px] text-muted mt-1">{etiqueta(i)}</div>
+            </div>
+            {i < layers.length - 1 && <span className="text-muted text-lg self-center">→</span>}
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-muted mt-2 leading-relaxed">
+        {recurrente
+          ? '↻ La capa oculta se realimenta con su estado anterior: memoria (W_rec).'
+          : 'Feedforward puro: la información fluye en una sola dirección, sin memoria.'}
+      </p>
+    </div>
+  );
+}
 
 function ModuloCerebro() {
   const [sel, setSel] = useState('rayos');
-  const [motor, setMotor] = useState('intermated');
+  const [motor, setMotor] = useState('intermated');   // selectedEngine
   const activa = ENTRADAS.find((e) => e.id === sel);
-  const m = MOTORES.find((x) => x.id === motor);
+  const m = MOTORES[motor];
 
   return (
     <div className="space-y-5">
-      <Card
-        title="Tres motores de red, uno seleccionable por evolución"
-        badge={<Badge tono="info">interactivo</Badge>}
-      >
+      {/* ---- Selector de motor: gobierna TODA la sección del Cerebro ---- */}
+      <Card title="Motor de la IA" badge={<Badge tono="ok">✅ 3 motores reales</Badge>}>
         <Hint className="mb-4">
-          El juego, los 26 sensores y el algoritmo genético son siempre los mismos.
-          Lo único que cambia entre motores es la <span className="text-ink">topología
-          del cerebro</span> y cómo su salida se traduce en un giro. Toca uno:
+          Cada IA se crea con un motor, y cada motor es una red neuronal distinta: por eso
+          <span className="text-ink"> aprenden de forma diferente</span>. El juego y los 26
+          sensores son los mismos; cambia la topología del cerebro. Elige uno y toda esta
+          sección se actualiza:
         </Hint>
 
-        <div className="grid gap-3 sm:grid-cols-3 mb-4">
-          {MOTORES.map((x) => (
-            <button
-              key={x.id}
-              onClick={() => setMotor(x.id)}
-              aria-pressed={motor === x.id}
-              className={`text-left p-4 rounded-panel border-2 transition
-                hover:-translate-y-0.5
-                ${motor === x.id ? 'border-accent' : 'border-line'}`}
-            >
-              <div className="text-sm font-medium text-ink">{x.label}</div>
-              <div className="text-xs text-accent tabular-nums mt-1">{x.arch}</div>
-              <div className="text-xs text-muted mt-1 leading-snug">{x.enfoque}</div>
-            </button>
+        {/* Selector muy visible: tabs a lo ancho, estado activo y badge. */}
+        <div className="flex flex-col sm:flex-row gap-2 mb-5" role="tablist"
+             aria-label="Motor de red">
+          {MOTORES_ORDENADOS.map((x) => {
+            const activo = motor === x.id;
+            return (
+              <button
+                key={x.id}
+                role="tab"
+                aria-selected={activo}
+                onClick={() => setMotor(x.id)}
+                className={`flex-1 text-left p-4 rounded-panel border-2 transition
+                  hover:-translate-y-0.5
+                  ${activo ? 'border-accent bg-accent/5' : 'border-line'}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`text-sm font-semibold ${activo ? 'text-ink' : 'text-muted'}`}>
+                    {x.label}
+                  </span>
+                  {activo && <Badge tono="ok">activo</Badge>}
+                </div>
+                <div className="text-xs text-accent tabular-nums mt-1">{x.arch}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Definición del motor activo — cambia con `motor` (selectedEngine). */}
+        <div className="bg-surface2 border border-line rounded-xl p-4 mb-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+            <div className="text-base font-semibold text-ink">{m.label}</div>
+            <Badge tono="info">{m.enfoque}</Badge>
+          </div>
+          <NetworkDiagram layers={m.layers} recurrente={m.recurrente} />
+        </div>
+
+        <p className="text-sm text-muted leading-relaxed mb-4">{m.aprende}</p>
+
+        <Code caption={`Cómo «${m.label}» decide un giro (forward de su red).`}>
+          {m.codigo}
+        </Code>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+          {[
+            { k: 'Entrada → Salida', v: `26 → ${m.layers[m.layers.length - 1]}` },
+            { k: 'Pesos (ADN)', v: m.pesos },
+            { k: 'Uso de CPU', v: m.cpu },
+            { k: 'Velocidad de mutación', v: m.muta },
+          ].map((s) => (
+            <div key={s.k} className="bg-surface2 border border-line rounded-xl px-3 py-2">
+              <div className="text-xs text-muted">{s.k}</div>
+              <div className="text-sm text-ink mt-0.5">{s.v}</div>
+            </div>
           ))}
         </div>
 
-        <div className="bg-surface2 border border-line rounded-xl p-4">
-          <p className="text-sm text-muted leading-relaxed mb-3">{m.detalle}</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { k: 'Uso de CPU', v: m.cpu },
-              { k: 'Tamaño del ADN', v: m.adn },
-              { k: 'Velocidad de mutación', v: m.muta },
-              { k: 'Salida', v: m.salida },
-            ].map((s) => (
-              <div key={s.k}>
-                <div className="text-xs text-muted">{s.k}</div>
-                <div className="text-sm text-ink mt-0.5">{s.v}</div>
-              </div>
-            ))}
-          </div>
+        <div className="mt-3 text-sm text-ink">
+          <span className="text-muted">Salida:</span> {m.salida}
         </div>
 
-        <Hint className="mt-3 text-xs">
+        <Hint className="mt-4 text-xs">
           Se elige en <span className="text-ink">Entrenar IA → Motor de red</span> antes de
-          lanzar la evolución. Continuar un linaje conserva su motor: no se puede cambiar la
-          arquitectura de una IA a medias sin tirar lo aprendido.
+          evolucionar. La identidad de cada IA guardada es su <span className="text-ink">nombre</span>,
+          su <span className="text-ink">motor</span> y su <span className="text-ink">nivel</span>
+          {' '}actual (visibles en el Historial). Continuar un linaje conserva su motor: no se
+          cambia la arquitectura a medias.
         </Hint>
       </Card>
 
+      {/* ---- Percepción: común a todos los motores ---- */}
       <Card
-        title="Las 26 entradas, desglosadas"
+        title="Las 26 entradas · percepción común a todos los motores"
         badge={<Badge tono="info">interactivo</Badge>}
       >
         <Hint className="mb-4">
-          Toca cada bloque para ver qué mide. La suma es siempre{' '}
+          Todos los motores ven el tablero con estos mismos 26 sensores; lo que cambia es cómo
+          los procesan. Toca cada bloque. La suma es siempre{' '}
           <span className="text-ink font-medium tabular-nums">24 + 1 + 1 = 26</span>.
         </Hint>
 
@@ -245,8 +362,8 @@ function ModuloCerebro() {
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="¿Por qué NumPy puro y no PyTorch/TensorFlow?" badge={<Badge tono="ok">decisión</Badge>}>
           <Hint className="mb-3">
-            El modelo es una red diminuta (26→20→3) que se <em>evoluciona</em>, no se
-            entrena por gradiente. Un framework de deep learning sería peso muerto:
+            Los tres motores se <em>evolucionan</em>, no se entrenan por gradiente. Sin
+            <em> backpropagation</em>, un framework de deep learning sería peso muerto:
           </Hint>
           <ul className="space-y-2 text-sm text-muted leading-relaxed">
             <li>▸ Sin autograd ni GPU: el forward es un puñado de multiplicaciones de matrices que NumPy hace de sobra en CPU.</li>
@@ -255,19 +372,32 @@ function ModuloCerebro() {
           </ul>
         </Card>
 
-        <Card title="Memoria recurrente (W_rec)" badge={<Badge tono="ok">✅ mecanismo listo</Badge>}>
-          <Hint className="mb-3">
-            La capa oculta se realimenta a sí misma: en cada turno ve las entradas del
-            momento <span className="text-ink">y su propio estado del turno anterior</span>.
-            Eso le da memoria dentro de una partida —recordar por dónde venía—, el
-            ingrediente de la planificación emergente.
-          </Hint>
-          <Code caption="Nace a cero: se comporta como una feedforward y la mutación va introduciendo la memoria, así que añadirla no degrada nada de lo aprendido.">
+        {/* Memoria: solo el motor recurrente la tiene; la tarjeta cambia con él. */}
+        {m.recurrente ? (
+          <Card title="Memoria recurrente (W_rec)" badge={<Badge tono="ok">✅ en este motor</Badge>}>
+            <Hint className="mb-3">
+              La capa oculta se realimenta a sí misma: en cada turno ve las entradas del
+              momento <span className="text-ink">y su propio estado del turno anterior</span>.
+              Eso le da memoria dentro de una partida —recordar por dónde venía—, el
+              ingrediente de la planificación emergente.
+            </Hint>
+            <Code caption="Nace a cero: se comporta como una feedforward y la mutación va introduciendo la memoria, así que añadirla no degrada nada de lo aprendido.">
 {`# estado oculto que persiste entre pasos
 h = tanh(W1 @ x + W_rec @ h_prev + b1)
 salida = W2 @ h + b2      # recto | izq | der`}
-          </Code>
-        </Card>
+            </Code>
+          </Card>
+        ) : (
+          <Card title="Sin memoria recurrente" badge={<Badge tono="mute">feedforward</Badge>}>
+            <Hint>
+              El motor <span className="text-ink">{m.label}</span> es feedforward puro: cada
+              decisión depende solo de lo que ve en ese turno, sin arrastrar estado del
+              anterior. Gana simplicidad y velocidad de mutación; renuncia a la memoria
+              intra-partida. Para planificación que dependa de "por dónde venía", el motor{' '}
+              <span className="text-ink">RNN Recurrente</span> es el indicado.
+            </Hint>
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -65,7 +65,7 @@ sensores, mismo juego, mismo algoritmo genético — solo cambia la topología y
 
 | Motor | Arquitectura | Enfoque | CPU | Mutación |
 | --- | --- | --- | --- | --- |
-| **`advanced`** | 26 → 32 → 16 → 3 | Deep learning eficiente: abstracción espacial, converge antes | Media-alta | Rápida |
+| **`advanced`** | 26 → 16 → 3 | Feedforward compacto de 1 capa (LeakyReLU, ~483 pesos): más evaluaciones/seg | Baja-media | Rápida |
 | **`intermated`** | 26 → 20 → 3 (recurrente) | Genético clásico, **por defecto**: ADN compacto, memoria | Baja | Muy eficiente |
 | **`basic`** | 26 → 52 → 26 → 1 | Teórico/expansivo: salida por rangos, máxima expresividad | Alta | Lenta |
 

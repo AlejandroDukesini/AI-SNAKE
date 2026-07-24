@@ -201,7 +201,7 @@ def clamp_elite(value, pop_size=POP_SIZE):
 #  Los tres motores comparten entrada (26) y accion (0=recto, 1=izquierda,
 #  2=derecha), asi que son intercambiables como cerebro de un `Snake`:
 #    - intermated  26 -> 20 -> 3            recurrente (el motor de siempre)
-#    - advanced    26 -> 32 -> 16 -> 3      feedforward profundo
+#    - advanced    26 -> 16 -> 3           feedforward compacto (1 capa, LeakyReLU)
 #    - basic       26 -> 52 -> 26 -> 1      feedforward ancho, salida por rangos
 # =============================================================================
 class Brain:
@@ -257,9 +257,19 @@ class Brain:
 
     @classmethod
     def from_dict(cls, d):
-        """Reconstruye la red desde `to_dict`. Por defecto carga los pesos tal
-        cual; `IntermatedNetwork` lo redefine para ADAPTAR modelos antiguos."""
-        return cls([np.array(d[k], dtype=np.float64) for k in cls._keys])
+        """Reconstruye la red desde `to_dict`, cargando los pesos SOLO si sus formas
+        coinciden con la arquitectura actual del motor. Si un modelo se guardo con
+        una version distinta de esta red (p. ej. tras rediseñar sus capas), devuelve
+        una red nueva en vez de reventar. `IntermatedNetwork` lo redefine para
+        ADAPTAR ademas tamaños antiguos sin perder lo aprendido."""
+        ref = cls()                       # red nueva: define las formas actuales
+        pesos = []
+        for k in cls._keys:
+            w = np.array(d.get(k, []), dtype=np.float64)
+            if w.shape != getattr(ref, k).shape:
+                return ref                # formas incompatibles -> red nueva, sin crashear
+            pesos.append(w)
+        return cls(pesos)
 
 
 class IntermatedNetwork(Brain):
@@ -349,34 +359,53 @@ class IntermatedNetwork(Brain):
         return [nW1, nb1, nW_rec, nW2, nb2]
 
 
-class AdvancedNetwork(Brain):
-    """Motor `advanced` — Deep Learning eficiente.
+def _leaky_relu(z, alpha=0.01):
+    """LeakyReLU: como ReLU pero deja pasar una fraccion pequeña de lo negativo.
 
-    Feedforward 26 -> 32 -> 16 -> 3 con dos capas ocultas (ReLU). Mas capacidad de
-    abstraccion espacial: las dos capas comprimen la percepcion en rasgos de alto
-    nivel ("hay un callejon a mi izquierda") que ayudan a la serpiente larga a no
-    encerrarse. Converge en menos generaciones a costa de mas pesos y mas CPU por
-    inferencia. Decide por argmax de las 3 salidas, igual que `intermated`.
+    En una red EVOLUCIONADA (sin gradiente) el problema de las neuronas muertas es
+    real: una unidad ReLU que cae en negativo para todas las entradas queda a cero
+    para siempre y solo una mutacion afortunada la revive, malgastando capacidad.
+    La fuga (alpha) mantiene toda la red viva y aprovechable, lo que mejora la
+    evolvabilidad de las redes profundas mas que anadir parametros."""
+    return np.where(z > 0.0, z, alpha * z)
+
+
+class AdvancedNetwork(Brain):
+    """Motor `advanced` — feedforward COMPACTO de una sola capa oculta (26 -> 16 -> 3).
+
+    Se simplifico desde la version profunda anterior (26 -> 16 -> 16 -> 3) por un
+    motivo empirico de la NEUROEVOLUCION: la profundidad estorba. Cada capa extra
+    multiplica el espacio de busqueda y hace que la mutacion COMPONGA ruido capa a
+    capa, de modo que una red mas profunda evoluciona mas lento y peor en tiempo
+    limitado (mas parametros que ajustar, menos evaluaciones por segundo). Una sola
+    capa oculta:
+
+      - Maximiza evaluaciones/segundo y elimina la barrera de propagacion.
+      - Reduce el ADN a ~483 pesos, un espacio de busqueda que el genetico recorre
+        mucho antes.
+      - Conserva abstraccion suficiente para el entorno (16 rasgos ocultos sobre los
+        26 sensores).
+
+    LeakyReLU mantiene toda la red viva (sin neuronas muertas, que una red
+    evolucionada no revive con facilidad). Decide por argmax de las 3 salidas
+    (recto / izquierda / derecha), igual que `intermated`.
     """
 
     NAME = "advanced"
-    _keys = ("W1", "b1", "W2", "b2", "W3", "b3")
-    H1, H2 = 32, 16
+    _keys = ("W1", "b1", "W2", "b2")
+    HIDDEN = 16
 
     def _random_weights(self):
         return [
-            np.random.randn(self.H1, N_INPUTS) * np.sqrt(2.0 / N_INPUTS),
-            np.zeros(self.H1),
-            np.random.randn(self.H2, self.H1) * np.sqrt(2.0 / self.H1),
-            np.zeros(self.H2),
-            np.random.randn(N_OUTPUTS, self.H2) * np.sqrt(2.0 / self.H2),
+            np.random.randn(self.HIDDEN, N_INPUTS) * np.sqrt(2.0 / N_INPUTS),
+            np.zeros(self.HIDDEN),
+            np.random.randn(N_OUTPUTS, self.HIDDEN) * np.sqrt(2.0 / self.HIDDEN),
             np.zeros(N_OUTPUTS),
         ]
 
     def forward(self, x):
-        h1 = np.maximum(0.0, self.W1 @ x + self.b1)
-        h2 = np.maximum(0.0, self.W2 @ h1 + self.b2)
-        o  = self.W3 @ h2 + self.b3
+        h = _leaky_relu(self.W1 @ x + self.b1)
+        o = self.W2 @ h + self.b2
         return int(np.argmax(o))
 
 
@@ -427,9 +456,10 @@ DEFAULT_ENGINE = "intermated"
 ENGINE_INFO = {
     "advanced": {
         "label": "Advanced",
-        "arch": "26 → 32 → 16 → 3",
-        "resumen": "Deep learning eficiente: dos capas ocultas para abstraccion "
-                   "espacial. Converge en menos generaciones, mas CPU por paso.",
+        "arch": "26 → 16 → 3",
+        "resumen": "Feedforward compacto de una sola capa oculta (LeakyReLU, ~483 "
+                   "pesos). Sin profundidad que estorbe: mas evaluaciones/segundo y "
+                   "mejor convergencia en tiempo limitado.",
     },
     "intermated": {
         "label": "Intermated",
@@ -888,13 +918,29 @@ def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
     while infinite or gen < generations:
         gen += 1
         for idx, snake in enumerate(population, start=1):
-            # Pausa entre agentes: el hueco natural donde el estado del mundo ya
-            # esta cerrado. Pausar en mitad de una partida dejaria a la serpiente
-            # congelada a medio turno sin ninguna ventaja.
+            # Pausa/parada al empezar cada agente (cubre el caso de un agente que
+            # muere al instante y no llega a ejecutar el bucle de pasos de abajo).
             while pause_check is not None and pause_check():
                 time.sleep(0.05)
+            if stop_check is not None and stop_check():
+                detenido = True
+                break
 
             while snake.alive:
+                # Pausa y PARADA evaluadas PASO A PASO. Con el motor Advanced o una
+                # poblacion grande, una sola partida puede durar cientos de pasos:
+                # evaluar las banderas solo al cerrar la generacion (o entre agentes)
+                # hacia que "Pausar" y "Detener y guardar" tardaran segundos en
+                # notarse, y la UI parecia congelada. Como el mejor linaje
+                # (best_brain) se guarda de forma global en CADA paso, cortar aqui
+                # devuelve un resultado tan valido como terminar la generacion.
+                # (Descartar sigue siendo instantaneo via el retorno de `emit`.)
+                while pause_check is not None and pause_check():
+                    time.sleep(0.05)
+                if stop_check is not None and stop_check():
+                    detenido = True
+                    break
+
                 snake.step_ai()
                 frame += 1
 
@@ -916,6 +962,14 @@ def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
                     "snake":        snake.to_state(),
                 }):
                     return None
+
+            if detenido:
+                break
+
+        # Parada disparada dentro de la generacion: se sale sin generar descendencia.
+        # El resultado que se devuelve abajo (best_brain global) es valido igual.
+        if detenido:
+            break
 
         fitnesses = [s.fitness() for s in population]
         gen_best = max(fitnesses)

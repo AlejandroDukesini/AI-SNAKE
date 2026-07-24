@@ -170,3 +170,89 @@
   Paso 6: Vision CNN del tablero completo -> N5 (linea de I+D; alcanzar >80% de
           cobertura es un resultado de entrenamiento, no de codigo).
 ================================================================================
+
+================================================================================
+  ANALISIS DE TIEMPO POR NIVEL, MOTOR Y TABLERO
+================================================================================
+  IMPORTANTE - lo que este analisis SI y NO afirma:
+    - NO dice "el motor X tarda Z minutos en llegar a N4". Hasta la fecha NINGUN
+      especimen ha superado N1 (el mejor: N1 con 5608 generaciones en 15x15), asi
+      que cualquier tiempo-a-N2..N5 seria DECLARADO, no medido. No se inventa.
+    - SI da las piezas reales para estimarlo uno mismo tras entrenar, separando lo
+      determinista (mate), lo medido (coste/generacion) y lo empirico (a medir).
+
+  El tiempo hasta un nivel se descompone en:
+
+      tiempo_hasta_Nk  =  generaciones_hasta_Nk  x  coste_por_generacion
+
+    - coste_por_generacion .... MEDIBLE (bloque B); depende de motor y tablero.
+    - generaciones_hasta_Nk ... EMPIRICO (bloque C); depende de la evolvabilidad y
+                                de la suerte evolutiva. Se obtiene entrenando.
+
+--------------------------------------------------------------------------------
+  A) DETERMINISTA - longitud que exige cada nivel en cada tablero
+--------------------------------------------------------------------------------
+  cobertura = longitud / (grid*grid).  La serpiente nace con longitud 3.
+  Umbral minimo para estar EN el nivel:
+      N1 >= 0.10   N2 >= 0.20   N3 >= 0.35   N4 >= 0.55   N5 >= 0.80
+
+  Longitud minima requerida  (entre parentesis: frutas a comer = longitud - 3):
+
+    Tablero |   N1    |   N2    |   N3    |   N4     |   N5
+    --------+---------+---------+---------+----------+----------
+     8x8    |  7  (4) | 13 (10) | 23 (20) | 36  (33) | 52  (49)
+    10x10   | 10  (7) | 20 (17) | 35 (32) | 55  (52) | 80  (77)
+    15x15   | 23 (20) | 45 (42) | 79 (76) | 124(121) | 180(177)
+
+  Lectura clave: el MISMO nivel es mucho mas facil en un tablero pequeno. N2 son
+  10 frutas en 8x8 pero 42 en 15x15. Por eso los tests en 15x15 se estancan en
+  N0/N1: el tablero grande dispara el liston de longitud. Para SUBIR de nivel
+  rapido conviene entrenar en 8x8 (los sensores estan normalizados: lo aprendido
+  transfiere a tableros mayores).
+
+--------------------------------------------------------------------------------
+  B) MEDIDO - coste por generacion (ms), poblacion 25
+--------------------------------------------------------------------------------
+  Maquina del desarrollador; media de 4 generaciones INICIALES; train() cronometrado.
+
+    Motor       |   8x8   |  10x10  |  15x15
+    ------------+---------+---------+---------
+    intermated  | 102 ms  | 121 ms  | 264 ms
+    advanced    |  97 ms  |  98 ms  | 258 ms
+    basic       |  60 ms  |  92 ms  | 153 ms
+
+  - El coste lo domina la PERCEPCION (flood-fill, ~area del tablero), no el forward:
+    por eso los tres motores cuestan parecido y el TABLERO pesa mas que el motor.
+    15x15 cuesta ~2.5x mas que 8x8.
+  - CAVEAT: son generaciones INICIALES (serpientes que mueren pronto). Cuando la
+    poblacion mejora y sobrevive mas pasos, el coste por generacion SUBE. Usa estos
+    numeros como SUELO, no como techo.
+
+  Generaciones por 10 min (derivado, orden de magnitud, poblacion joven):
+      8x8:   ~6.000 - 10.000      10x10: ~5.000 - 6.500      15x15: ~2.300 - 3.900
+
+  Es exactamente lo que limita cuanto se puede evolucionar en tiempo dado: mas
+  tablero -> menos generaciones -> nivel mas bajo. Y es la razon de que el Paso 3
+  (evaluacion vectorizada) sea el pendiente de mayor retorno: multiplicar gen/min
+  sube el techo de nivel alcanzable sin cambiar la red.
+
+--------------------------------------------------------------------------------
+  C) EMPIRICO - generaciones hasta cada nivel  (LO QUE FALTA MEDIR)
+--------------------------------------------------------------------------------
+  Observado hasta hoy (unico dato real):
+    - N0: inmediato (generacion 1). Longitud 3 ya es <10% en cualquier tablero.
+    - N1: alcanzado por PRUEBA-UNO en 15x15 en algun punto de sus 5608 gen (no se
+      registro la generacion exacta del cruce). En 8x8 deberia costar mucho menos
+      (N1 son 4 frutas alli, no 20).
+    - N2..N5: NO observado en ningun motor ni tablero. Sin dato no hay numero.
+
+  Receta para obtenerlo de verdad (y luego rellenar esta tabla como MEDIDO):
+    1. Entrenar registrando por generacion la cobertura del mejor (el evento 'gen'
+       ya trae los campos "cobertura" y "nivel").
+    2. Anotar la primera generacion en que sube el nivel (N0->N1, N1->N2, ...).
+    3. tiempo_a_Nk = esa_generacion x (ms/gen del bloque B para ese motor+tablero).
+    4. Repetir varias corridas (la evolucion tiene azar) y reportar mediana + rango.
+
+  Hasta que existan esos datos, la columna "generaciones_hasta_Nk" queda VACIA a
+  proposito: preferimos un hueco honesto a un numero inventado.
+================================================================================

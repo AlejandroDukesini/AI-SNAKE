@@ -1,18 +1,29 @@
-# Node
+# Node / Frontend
 node_modules/
 dist/
+package-lock.json
 
-# Python
-__pycache__/
+# Python (Caché global en cualquier subcarpeta)
+**/__pycache__/
 *.py[cod]
+*$py.class
+
+# Entornos virtuales
 .venv/
 venv/
+ENV/
 
-# Configuracion local del usuario (tema, generaciones, tablero).
-# Se regenera sola: versionarla haria que cada maquina pisara las preferencias
-# de la otra en cada pull.
+# Herramientas de IA y Pruebas locales
+.claude/
+
+# Datos de entrenamiento temporales y locales
+historial/
+probando-ia/
+
+# Configuración local del usuario (tema, generaciones, tablero)
+# Se regenera sola: versionarla haría que cada máquina pisara las preferencias
 config.json
 
-# Sistema
+# Sistema operativo
 .DS_Store
 Thumbs.db

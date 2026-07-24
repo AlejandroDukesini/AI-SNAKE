@@ -9,7 +9,7 @@
 
 | Motor | Arquitectura | Enfoque | Pesos (ADN) | CPU | Mutación |
 | --- | --- | --- | ---: | --- | --- |
-| **`advanced`** | 26 → 32 → 16 → 3 | Deep learning eficiente | ≈ 1.443 | Media-alta | Rápida (converge antes) |
+| **`advanced`** | 26 → 16 → 3 | Feedforward compacto de 1 capa (LeakyReLU) | ≈ 483 | Baja-media | Rápida (espacio de búsqueda pequeño) |
 | **`intermated`** | 26 → 20 → 3 (recurrente) | Algoritmo genético clásico · **por defecto** | ≈ 1.003 | Baja | Muy eficiente |
 | **`basic`** | 26 → 52 → 26 → 1 | Teórico / expansivo | ≈ 2.809 | Alta | Lenta (más genes que ajustar) |
 
@@ -55,7 +55,7 @@ en resultados establecidos de optimización y aprendizaje automático.
 
 **Conclusión:** el problema es representable, el paisaje es navegable y el optimizador es adecuado
 al régimen sin-gradiente. Por eso funciona — y por eso las cifras del proyecto son medibles, no
-declarativas (ver `TECHNICAL_PROOF.md`).
+declarativas (ver `ARCHITECTURE.md`, Parte II).
 
 ---
 
@@ -81,23 +81,24 @@ acción = argmax(o)                             # recto | izquierda | derecha
   con menos evaluaciones. Es el motor más eficiente para evolucionar, y el único con especímenes
   previos (conserva la carga adaptativa que reescala modelos antiguos sin regresión).
 
-### `advanced` — feedforward profundo 26 → 32 → 16 → 3
+### `advanced` — feedforward compacto de una capa 26 → 16 → 3
 
 ```python
-h1 = relu(W1 @ x  + b1)      # 32 neuronas
-h2 = relu(W2 @ h1 + b2)      # 16 neuronas
-o  = W3 @ h2 + b3
-acción = argmax(o)
+h = leaky_relu(W1 @ x + b1)   # 16 neuronas
+o = W2 @ h + b2               # 3 salidas
+acción = argmax(o)            # recto | izquierda | derecha
 ```
 
-- **Cómo procesa:** dos capas ocultas comprimen la percepción en **rasgos de alto nivel** ("hay un
-  callejón sin salida a mi izquierda"). Esa mayor capacidad de abstracción espacial ayuda a la
-  serpiente larga a no encerrarse.
-- **Memoria / CPU:** ≈ 1.443 pesos y dos multiplicaciones matriciales por paso → **más CPU** que
-  `intermated`.
-- **Impacto en la mutación:** más parámetros elevan la dimensión del espacio de búsqueda, pero la
-  mayor capacidad suele **converger en menos generaciones** a comportamientos competentes. Buen
-  equilibrio cuando el cuello de botella es la calidad de la política, no el presupuesto de CPU.
+- **Cómo procesa:** una **sola** capa oculta de 16 neuronas (LeakyReLU) mapea los 26 sensores a la
+  decisión. Se simplificó desde la versión profunda anterior (26 → 16 → 16 → 3): en neuroevolución
+  la profundidad **estorba** — cada capa extra agranda el espacio de búsqueda y la mutación compone
+  ruido capa a capa, de modo que una red profunda evoluciona más lento y peor en tiempo limitado.
+- **Memoria / CPU:** ≈ 483 pesos. El coste por paso lo domina la percepción (flood-fill), idéntica
+  en los tres motores, no este forward; la ganancia real está en **más evaluaciones por segundo**.
+- **Impacto en la mutación:** un espacio de búsqueda **pequeño** hace que el genético **converja con
+  menos evaluaciones**; LeakyReLU evita neuronas muertas (que una red evolucionada no revive con
+  facilidad). El problema de la versión profunda no era la CPU, era la evolvabilidad — y una sola
+  capa la corrige. Ver [`CHANGELOG.md`](../CHANGELOG.md).
 
 ### `basic` — feedforward ancho 26 → 52 → 26 → 1
 
