@@ -28,6 +28,7 @@ LICENCIA -> VER ARCHIVO LICENCE
 ================================================================================
 """
 
+import time
 import random
 
 import numpy as np
@@ -38,10 +39,18 @@ import numpy as np
 GRID_SIZES    = (8, 10, 15)  # Dimensiones de tablero que ofrece la interfaz
 DEFAULT_GRID  = 8
 
-POP_SIZE      = 25           # Agentes por generacion
+POP_SIZE      = 25           # Agentes por generacion (valor por defecto)
 DEFAULT_GENERATIONS = 5      # Generaciones por entrenamiento
 MIN_GENERATIONS = 1
 MAX_GENERATIONS = 100
+
+# Rango de poblacion que la interfaz puede pedir. El suelo es 4 porque con menos
+# agentes el torneo (TOURNAMENT_K=3) y el elitismo se quedan sin donde elegir y
+# la evolucion degenera en copiar al unico superviviente. El techo es 100 porque
+# el coste por generacion crece LINEALMENTE con la poblacion: 200 agentes no
+# entrenan mejor, solo tardan el doble.
+MIN_POP_SIZE  = 4
+MAX_POP_SIZE  = 100
 
 ENERGY_START  = 200          # Pasos sin comer antes de morir de inanicion
 ELITE_COUNT   = 3            # Elitismo: mejores redes que pasan intactas
@@ -148,6 +157,33 @@ def clamp_grid(value):
     except (TypeError, ValueError):
         return DEFAULT_GRID
     return value if value in GRID_SIZES else DEFAULT_GRID
+
+
+def clamp_pop_size(value):
+    """Normaliza el numero de agentes por generacion que llega del usuario."""
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return POP_SIZE
+    return max(MIN_POP_SIZE, min(MAX_POP_SIZE, value))
+
+
+def clamp_elite(value, pop_size=POP_SIZE):
+    """Normaliza cuantos cerebros se HEREDAN intactos de una generacion a la
+    siguiente (elitismo).
+
+    El tope es `pop_size - 1` y no `pop_size` por una razon dura: si la elite
+    ocupara toda la poblacion no quedaria hueco para un solo hijo, `next_generation`
+    devolveria una copia exacta de la generacion anterior y la evolucion se
+    detendria para siempre sin dar ningun error. El suelo es 1 para garantizar que
+    el mejor linaje nunca se pierde por mala suerte del cruce.
+    """
+    tope = max(1, int(pop_size) - 1)
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return min(ELITE_COUNT, tope)
+    return max(1, min(tope, value))
 
 
 # =============================================================================
@@ -560,7 +596,8 @@ def tournament_select(pop):
     return max(aspirantes, key=lambda s: s.fitness())
 
 
-def next_generation(pop, grid=DEFAULT_GRID, pop_size=POP_SIZE, mutation_std=MUTATION_STD):
+def next_generation(pop, grid=DEFAULT_GRID, pop_size=POP_SIZE, mutation_std=MUTATION_STD,
+                    elite=ELITE_COUNT):
     """Construye la siguiente generacion a partir de los MEJORES de la actual.
 
     Aqui ocurre la herencia: se ordena por fitness, la elite pasa intacta y el
@@ -569,10 +606,16 @@ def next_generation(pop, grid=DEFAULT_GRID, pop_size=POP_SIZE, mutation_std=MUTA
 
     `mutation_std` la fija el entrenamiento: baja cuando la poblacion se estanca
     (recocido) para afinar en vez de saltar al azar.
+
+    `elite` es el numero de HERENCIAS directas por generacion: cuantos cerebros
+    cruzan intactos, sin cruce ni mutacion. Subirlo conserva mas de lo aprendido
+    (converge antes, explora menos); bajarlo explora mas a riesgo de perder
+    buenas soluciones. Por defecto mantiene el ELITE_COUNT de siempre, asi que
+    quien no lo pase obtiene exactamente el comportamiento anterior.
     """
     ordenados = sorted(pop, key=lambda s: s.fitness(), reverse=True)
     nueva = [Snake(ordenados[i].brain.clone(), grid=grid)
-             for i in range(min(ELITE_COUNT, len(ordenados)))]
+             for i in range(min(elite, len(ordenados)))]
     while len(nueva) < pop_size:
         padre_a = tournament_select(pop)
         padre_b = tournament_select(pop)
@@ -598,23 +641,48 @@ def seed_population(seed_brain=None, grid=DEFAULT_GRID, pop_size=POP_SIZE):
 
 
 def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
-          seed_brain=None, on_event=None):
-    """Ejecuta la neuroevolucion durante `generations` generaciones (1 a 100).
+          seed_brain=None, on_event=None, elite=ELITE_COUNT, infinite=False,
+          stop_check=None, pause_check=None):
+    """Ejecuta la neuroevolucion durante `generations` generaciones (1 a 100), o
+    SIN LIMITE si `infinite=True`.
 
     En vez de dibujar, llama a `on_event(tipo, datos)`: cada interfaz decide que
-    hacer con el progreso. Si `on_event` devuelve False, el entrenamiento se
-    CANCELA y esta funcion devuelve None.
+    hacer con el progreso.
+
+    Hay DOS formas distintas de terminar antes de tiempo, y la diferencia importa
+    porque una tira el trabajo y la otra no:
+
+      - DESCARTAR: `on_event` devuelve False. Corta en el acto, en mitad de la
+        generacion, y esta funcion devuelve None. Es la cancelacion de siempre:
+        no hay resultado, asi que quien llama no guarda nada.
+      - DETENER: `stop_check()` devuelve True. Se comprueba solo AL CERRAR una
+        generacion, nunca a medias, de modo que la poblacion queda en un estado
+        coherente y esta funcion devuelve un resultado NORMAL, indistinguible del
+        de un entrenamiento que llego a su fin. Es lo que permite parar el modo
+        infinito sin perder horas de evolucion.
+
+    `pause_check()` congela el entrenamiento entre agentes mientras devuelva True.
+    Su implementacion DEBE dejar de devolver True si se pide descartar o detener,
+    o el entrenamiento se quedaria pausado para siempre (ver `ai_server.ws_train`).
 
     NO guarda nada: devuelve el mejor linaje y es quien llama el que decide si
     crea un especimen nuevo o le suma generaciones a uno existente.
 
     Devuelve {"brain", "fitness", "frutas", "pasos", "length", "generaciones",
-    "grid", "cobertura", "nivel", "nivel_etiqueta"}, o None si se cancelo.
+    "grid", "cobertura", "nivel", "nivel_etiqueta", "detenido"}, o None si se
+    descarto. `generaciones` son las REALMENTE completadas, que en modo infinito
+    (o tras un `stop`) no coinciden con las pedidas.
 
     Eventos: ("step", {...}) por turno simulado, ("gen", {...}) por generacion.
     """
-    generations = clamp_generations(generations)
+    # En modo infinito no hay numero de generaciones que validar: el limite lo
+    # pone el usuario al pulsar Detener. Se deja en 0 para que la interfaz lo
+    # reciba como "sin total" y dibuje un progreso indeterminado en vez de una
+    # barra que nunca avanza.
+    generations = 0 if infinite else clamp_generations(generations)
     grid = clamp_grid(grid)
+    pop_size = clamp_pop_size(pop_size)
+    elite = clamp_elite(elite, pop_size)
     population = seed_population(seed_brain, grid, pop_size)
 
     best_fitness = -1
@@ -635,8 +703,21 @@ def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
             return True
         return on_event(tipo, datos) is not False
 
-    for gen in range(1, generations + 1):
+    gen = 0
+    detenido = False
+
+    # Bucle abierto en vez de `range(1, generations + 1)`: el modo infinito no
+    # tiene tope y el modo normal para en `generations`. Un solo bucle para los
+    # dos casos evita duplicar el cuerpo del entrenamiento.
+    while infinite or gen < generations:
+        gen += 1
         for idx, snake in enumerate(population, start=1):
+            # Pausa entre agentes: el hueco natural donde el estado del mundo ya
+            # esta cerrado. Pausar en mitad de una partida dejaria a la serpiente
+            # congelada a medio turno sin ninguna ventaja.
+            while pause_check is not None and pause_check():
+                time.sleep(0.05)
+
             while snake.alive:
                 snake.step_ai()
                 frame += 1
@@ -651,6 +732,7 @@ def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
                 if not emit("step", {
                     "generation":   gen,
                     "generations":  generations,
+                    "infinito":     infinite,
                     "agent":        idx,
                     "pop_size":     pop_size,
                     "best_fitness": best_fitness,
@@ -676,6 +758,7 @@ def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
         if not emit("gen", {
             "generation":     gen,
             "generations":    generations,
+            "infinito":       infinite,
             "best":           gen_best,
             "avg":            sum(fitnesses) / float(len(population)),
             "best_length":    max(s.length for s in population),
@@ -686,10 +769,17 @@ def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
         }):
             return None
 
+        # Punto de parada LIMPIA: la generacion esta cerrada y evaluada, asi que
+        # lo que se devuelve aqui es tan valido como el final de un entrenamiento
+        # normal. Es lo unico que separa "detener y guardar" de "descartar".
+        if stop_check is not None and stop_check():
+            detenido = True
+            break
+
         # La ultima generacion no necesita descendencia: ya se evaluo.
-        if gen < generations:
+        if infinite or gen < generations:
             population = next_generation(population, grid, pop_size,
-                                         mutation_std=mutation_std)
+                                         mutation_std=mutation_std, elite=elite)
 
     info = nivel_de_cobertura(cobertura(best_length, grid))
     return {
@@ -698,9 +788,13 @@ def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
         "frutas":         int(best_fruits),
         "pasos":          int(best_steps),
         "length":         int(best_length),
-        "generaciones":   generations,
+        # Las generaciones REALMENTE completadas. En modo infinito (o tras un
+        # stop) no coinciden con las pedidas, y es este numero -no el pedido- el
+        # que `storage.save_training` suma al historico del especimen.
+        "generaciones":   gen,
         "grid":           grid,
         "cobertura":      info["cobertura"],
         "nivel":          info["nivel"],
         "nivel_etiqueta": info["etiqueta"],
+        "detenido":       detenido,
     }

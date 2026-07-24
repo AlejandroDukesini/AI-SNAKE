@@ -120,6 +120,15 @@ def get_config():
         "limits": {
             "min_generations": ml.MIN_GENERATIONS,
             "max_generations": ml.MAX_GENERATIONS,
+            # Rangos de los parametros que se eligen POR ENTRENAMIENTO (no se
+            # persisten en config.json). Se publican aqui, y no como constantes
+            # en el codigo React, para que los controles no puedan ofrecer un
+            # valor que luego el nucleo va a recortar en silencio.
+            "min_agents":      ml.MIN_POP_SIZE,
+            "max_agents":      ml.MAX_POP_SIZE,
+            "default_agents":  ml.POP_SIZE,
+            "min_elite":       1,
+            "default_elite":   ml.ELITE_COUNT,
         },
         "pop_size": ml.POP_SIZE,
     }
@@ -227,10 +236,22 @@ async def ws_train(ws: WebSocket):
         agotaria la memoria y saturaria la red. Al cliente solo le importa el
         fotograma mas reciente.
       - `eventos`: cola real para 'gen' y 'done', que NO se pueden perder.
+
+    Acciones que acepta del cliente:
+      {'action':'cancel'}   descartar: corta en el acto y NO guarda nada.
+      {'action':'stop'}     detener: cierra la generacion en curso y SI guarda.
+      {'action':'pause'}    congelar entre agentes.
+      {'action':'resume'}   reanudar.
     """
     await ws.accept()
 
+    # Tres senales independientes, y la distincion es lo que evita perder trabajo:
+    #   cancelar -> descartar (comportamiento historico del boton Cancelar)
+    #   parar    -> terminar la generacion en curso y GUARDAR
+    #   pausa    -> congelar sin terminar
     cancelar = threading.Event()
+    parar    = threading.Event()
+    pausa    = threading.Event()
     ultimo   = {"step": None}
     eventos  = queue.Queue()
     fin      = threading.Event()
@@ -241,8 +262,11 @@ async def ws_train(ws: WebSocket):
         return
 
     cfg = storage.load_config()
+    infinito    = bool(peticion.get("infinite", False))
     generations = ml.clamp_generations(peticion.get("generations", cfg["generations"]))
     grid        = ml.clamp_grid(peticion.get("grid", cfg["grid"]))
+    agentes     = ml.clamp_pop_size(peticion.get("agents", ml.POP_SIZE))
+    elite       = ml.clamp_elite(peticion.get("elite", ml.ELITE_COUNT), agentes)
     nombre      = peticion.get("nombre") or ml.random_name()
     carpeta     = storage.slugify(nombre)
 
@@ -250,13 +274,19 @@ async def ws_train(ws: WebSocket):
     previo = storage.load_model(carpeta)
     seed_brain = ml.NeuralNetwork.from_dict(previo["pesos"]) if previo else None
 
+    # Se devuelven los valores YA VALIDADOS, no los pedidos: si el usuario mando
+    # 500 agentes y el nucleo los recorta a 100, la interfaz debe enterarse en vez
+    # de seguir mostrando una cifra que no es la que se esta ejecutando.
     await ws.send_json({
         "type":     "info",
         "carpeta":  carpeta,
         "nombre":   nombre,
         "continua": previo is not None,
         "grid":     grid,
-        "generations": generations,
+        "generations": 0 if infinito else generations,
+        "infinito": infinito,
+        "agents":   agentes,
+        "elite":    elite,
     })
 
     def on_event(tipo, datos):
@@ -269,6 +299,16 @@ async def ws_train(ws: WebSocket):
             eventos.put({"type": tipo, **datos})
         return True
 
+    def esta_pausado():
+        """True mientras haya que congelar el entrenamiento.
+
+        Devuelve False en cuanto se pide descartar o detener, aunque la pausa
+        siga activa. Sin esa condicion, pausar y luego cerrar la pestana dejaria
+        al hilo girando dentro de su bucle de espera para siempre: un proceso
+        huerfano quemando un nucleo hasta reiniciar el servidor.
+        """
+        return pausa.is_set() and not cancelar.is_set() and not parar.is_set()
+
     def trabajo():
         """Hilo: entrena, guarda el mejor linaje en su carpeta y avisa.
 
@@ -277,12 +317,17 @@ async def ws_train(ws: WebSocket):
         """
         try:
             resultado = ml.train(generations=generations, grid=grid,
-                                 pop_size=ml.POP_SIZE, seed_brain=seed_brain,
-                                 on_event=on_event)
+                                 pop_size=agentes, seed_brain=seed_brain,
+                                 on_event=on_event, elite=elite,
+                                 infinite=infinito,
+                                 stop_check=parar.is_set,
+                                 pause_check=esta_pausado)
             if resultado is None:
-                return          # Cancelado: no se guarda nada
+                return          # Descartado: no se guarda nada
             resumen = storage.save_training(nombre, resultado)
-            eventos.put({"type": "done", "model": resumen, "continua": previo is not None})
+            eventos.put({"type": "done", "model": resumen,
+                         "continua": previo is not None,
+                         "detenido": bool(resultado.get("detenido"))})
         except Exception as exc:            # No dejar el hilo morir en silencio
             eventos.put({"type": "error", "detail": str(exc)})
         finally:
@@ -291,20 +336,36 @@ async def ws_train(ws: WebSocket):
     hilo = threading.Thread(target=trabajo, daemon=True)
     hilo.start()
 
-    async def escuchar_cancelacion():
-        """Atiende {'action':'cancel'} y la desconexion del navegador. Si el
-        usuario cierra la pestana hay que parar el hilo, o el servidor seguiria
-        quemando CPU para nadie."""
+    async def escuchar_ordenes():
+        """Atiende las acciones del cliente y su desconexion.
+
+        Al desconectar hay que parar el hilo, o el servidor seguiria quemando CPU
+        para nadie. COMO se para depende del modo, y aqui esta la decision que
+        evita perder trabajo: en modo infinito, cerrar la pestana tras dos horas
+        de evolucion no puede significar tirarlo todo, asi que se traduce en un
+        'stop' (cierra la generacion y guarda). En modo normal se mantiene el
+        comportamiento de siempre: descartar.
+        """
         try:
             while not fin.is_set():
                 msg = await ws.receive_json()
-                if msg.get("action") == "cancel":
+                accion = msg.get("action")
+                if accion == "cancel":
                     cancelar.set()
                     return
+                if accion == "stop":
+                    parar.set()
+                    eventos.put({"type": "stopping"})
+                elif accion == "pause":
+                    pausa.set()
+                    eventos.put({"type": "paused", "paused": True})
+                elif accion == "resume":
+                    pausa.clear()
+                    eventos.put({"type": "paused", "paused": False})
         except (WebSocketDisconnect, ValueError, RuntimeError):
-            cancelar.set()
+            (parar if infinito else cancelar).set()
 
-    escucha = asyncio.create_task(escuchar_cancelacion())
+    escucha = asyncio.create_task(escuchar_ordenes())
 
     try:
         # Bucle emisor: ritmo fijo, independiente de lo rapido que simule el hilo.
@@ -324,10 +385,22 @@ async def ws_train(ws: WebSocket):
         if cancelar.is_set():
             await ws.send_json({"type": "cancelled"})
     except (WebSocketDisconnect, RuntimeError):
-        cancelar.set()
+        (parar if infinito else cancelar).set()
     finally:
-        cancelar.set()
+        # Cierre ordenado. Un `cancelar.set()` incondicional aqui -como habia
+        # antes de existir el modo infinito- tiraria justo el resultado que un
+        # 'stop' en vuelo esta a punto de guardar, asi que solo se senaliza si el
+        # hilo sigue vivo, y con la senal que corresponda al modo.
+        if not fin.is_set():
+            (parar if infinito else cancelar).set()
+        # Si se cerro estando en pausa, hay que descongelar o el hilo se quedaria
+        # esperando una reanudacion que ya no puede llegar.
+        pausa.clear()
         escucha.cancel()
+        # Espera ACOTADA: `join` es bloqueante y esto corre en el bucle de
+        # asyncio. Si la generacion en curso tarda mas, el hilo (daemon) termina
+        # y guarda por su cuenta; lo que no se hace nunca es congelar el servidor
+        # entero esperandolo.
         hilo.join(timeout=2.0)
 
 

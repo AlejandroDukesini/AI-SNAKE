@@ -124,8 +124,8 @@ export default function App() {
         <main>
           {vista === 'play' && <PlayView theme={config.theme} grid={config.grid} />}
           {vista === 'train' && (
-            <TrainView theme={config.theme} config={config} models={models}
-                       onSaved={cargarModels} />
+            <TrainView theme={config.theme} config={config} limits={meta.limits}
+                       models={models} onSaved={cargarModels} />
           )}
           {vista === 'history' && (
             <HistoryView theme={config.theme} grid={config.grid} models={models}

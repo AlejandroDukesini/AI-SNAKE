@@ -5,7 +5,7 @@
    servidor (config.json) y se aplica al instante.
    ============================================================================ */
 
-import { Panel, Title, Hint, Field, Segmented } from '../components/ui';
+import { Panel, Title, Hint, Segmented, RangeField } from '../components/ui';
 
 /* Las miniaturas llevan colores FIJOS a proposito: muestran como se ve cada
    tema, asi que no deben seguir al tema activo. */
@@ -68,31 +68,16 @@ export default function ConfigView({ config, limits, grids, onChange }) {
           pero el entrenamiento tarda más.
         </Hint>
 
-        <Field
+        {/* Mismo control que usan los parametros de Entrenar (ver ui.RangeField):
+            deslizador para tantear y casilla numerica para el valor exacto. */}
+        <RangeField
           label={`${config.generations} ${config.generations === 1 ? 'generación' : 'generaciones'}`}
           help={`Entre ${limits.min_generations} y ${limits.max_generations}.`}
-        >
-          <div className="flex items-center gap-4">
-            <input
-              type="range"
-              min={limits.min_generations}
-              max={limits.max_generations}
-              value={config.generations}
-              onChange={(e) => onChange({ generations: Number(e.target.value) })}
-              className="flex-1 accent-accent"
-            />
-            <input
-              type="number"
-              min={limits.min_generations}
-              max={limits.max_generations}
-              value={config.generations}
-              onChange={(e) => onChange({ generations: Number(e.target.value) })}
-              className="w-20 bg-surface2 border border-line rounded-xl px-3 py-2
-                         text-ink text-center tabular-nums focus:outline-2
-                         focus:outline-offset-2 focus:outline-accent"
-            />
-          </div>
-        </Field>
+          value={config.generations}
+          min={limits.min_generations}
+          max={limits.max_generations}
+          onChange={(generations) => onChange({ generations })}
+        />
       </Panel>
 
       <Panel>

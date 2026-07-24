@@ -100,6 +100,74 @@ export function Field({ label, help, children }) {
   );
 }
 
+/* Deslizador + casilla numérica para el mismo valor. Nace de Configuración, que
+   ya usaba esta pareja: el deslizador es cómodo para tantear y el número es la
+   única forma de poner un valor exacto sin pelearse con el ratón. Al haber tres
+   controles así en Entrenar (agentes, generaciones, herencias) se extrae aquí en
+   vez de copiar el marcado cuatro veces. */
+export function RangeField({ label, help, value, onChange, min, max, step = 1,
+                            disabled = false }) {
+  // Un solo manejador para los dos controles: no pueden desincronizarse porque
+  // no hay dos estados, solo dos formas de tocar el mismo.
+  const cambiar = (e) => onChange(Number(e.target.value));
+
+  return (
+    <Field label={label} help={help}>
+      <div className="flex items-center gap-4">
+        <input
+          type="range"
+          min={min} max={max} step={step} value={value}
+          disabled={disabled}
+          onChange={cambiar}
+          className="flex-1 accent-accent disabled:opacity-40"
+        />
+        <input
+          type="number"
+          min={min} max={max} step={step} value={value}
+          disabled={disabled}
+          onChange={cambiar}
+          className="w-20 bg-surface2 border border-line rounded-xl px-3 py-2
+                     text-ink text-center tabular-nums focus:outline-2
+                     focus:outline-offset-2 focus:outline-accent
+                     disabled:opacity-40"
+        />
+      </div>
+    </Field>
+  );
+}
+
+/* Interruptor para una opción de sí o no. Es un <button> real con aria-pressed,
+   no un div pintado: así funciona con teclado y lo anuncian los lectores de
+   pantalla sin trabajo extra. */
+export function Toggle({ checked, onChange, label, help, disabled = false }) {
+  return (
+    <div className="flex items-start justify-between gap-4 bg-surface2 border
+                    border-line rounded-xl px-4 py-3 mb-5">
+      <div className="min-w-0">
+        <div className="text-sm text-ink">{label}</div>
+        {help && <p className="text-xs text-muted mt-1 leading-relaxed">{help}</p>}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={typeof label === 'string' ? label : undefined}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={`shrink-0 mt-0.5 w-11 h-6 rounded-full border transition
+          disabled:opacity-40 disabled:pointer-events-none
+          focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
+          ${checked ? 'bg-accent border-accent' : 'bg-surface border-line'}`}
+      >
+        <span
+          className={`block w-4 h-4 rounded-full bg-on-accent transition-transform
+            ${checked ? 'translate-x-6' : 'translate-x-1 bg-muted'}`}
+        />
+      </button>
+    </div>
+  );
+}
+
 export function Empty({ children }) {
   return (
     <div className="border border-dashed border-line rounded-panel py-16 px-6

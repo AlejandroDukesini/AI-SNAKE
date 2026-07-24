@@ -10,7 +10,8 @@ import { useCallback, useState } from 'react';
 import Board from '../components/Board';
 import { api } from '../lib/api';
 import { useSocket } from '../lib/useSocket';
-import { Panel, Title, Hint, Button, IconButton, Empty, Modal, Stat, LevelBadge } from '../components/ui';
+import { Title, Hint, Button, IconButton, Empty, Modal, Stat, LevelBadge } from '../components/ui';
+import { RenameModelModal, DeleteModelModal } from '../components/ModelDialogs';
 
 /* Los especimenes importados del formato antiguo no registraron sus
    generaciones y no se pueden deducir: se dice, no se inventa una cifra. */
@@ -102,8 +103,6 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
   const [vaciar, setVaciar] = useState(false);
   const [soloFavoritos, setSoloFavoritos] = useState(false);
   const [renombrar, setRenombrar] = useState(null);   // Especimen que se renombra
-  const [nuevoNombre, setNuevoNombre] = useState('');
-  const [errorNombre, setErrorNombre] = useState(null);
 
   const onDemo = useCallback((msg) => {
     if (msg.type === 'state') setDemoSnake(msg.snake);
@@ -115,31 +114,6 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
 
   const favorito = async (m) => {
     await api.setFavorite(m.carpeta, !m.favorito);
-    onChanged();
-  };
-
-  const abrirRenombrar = (m) => {
-    setNuevoNombre(m.nombre);
-    setErrorNombre(null);
-    setRenombrar(m);
-  };
-
-  const confirmarRenombrado = async () => {
-    const nombre = nuevoNombre.trim();
-    if (!nombre) { setErrorNombre('Escribe un nombre.'); return; }
-    if (nombre === renombrar.nombre) { setRenombrar(null); return; }
-    try {
-      await api.renameModel(renombrar.carpeta, nombre);
-      setRenombrar(null);
-      onChanged();
-    } catch (e) {
-      setErrorNombre(e.message);
-    }
-  };
-
-  const confirmarBorrado = async () => {
-    await api.deleteModel(borrar.carpeta);
-    setBorrar(null);
     onChanged();
   };
 
@@ -184,7 +158,7 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
           {visibles.map((m, i) => (
             <ModelRow key={m.carpeta} m={m} index={i}
                       onProbar={(x) => { setDemoSnake(null); setProbando(x); }}
-                      onFavorito={favorito} onRenombrar={abrirRenombrar}
+                      onFavorito={favorito} onRenombrar={setRenombrar}
                       onBorrar={setBorrar} />
           ))}
         </div>
@@ -207,43 +181,13 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
         </div>
       </Modal>
 
-      {/* --- Renombrar --- */}
-      <Modal open={!!renombrar} onClose={() => setRenombrar(null)}
-             title="Renombrar IA">
-        <Hint className="mb-4">
-          Cambia el nombre de <b className="text-ink">{renombrar?.nombre}</b> sin
-          perder su entrenamiento: conserva sus generaciones, su récord y su nivel.
-        </Hint>
-        <input
-          type="text"
-          value={nuevoNombre}
-          autoFocus
-          maxLength={40}
-          onChange={(e) => { setNuevoNombre(e.target.value); setErrorNombre(null); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') confirmarRenombrado(); }}
-          className="w-full bg-surface2 border border-line rounded-xl px-4 py-2.5
-                     text-ink placeholder:text-muted focus:outline-2
-                     focus:outline-offset-2 focus:outline-accent"
-        />
-        {errorNombre && <p className="text-xs text-danger mt-2">{errorNombre}</p>}
-        <div className="flex justify-end gap-2 mt-5">
-          <Button onClick={() => setRenombrar(null)}>Cancelar</Button>
-          <Button variant="primary" onClick={confirmarRenombrado}>Guardar nombre</Button>
-        </div>
-      </Modal>
-
-      {/* --- Borrar uno --- */}
-      <Modal open={!!borrar} onClose={() => setBorrar(null)} danger
-             title="¿Borrar este espécimen?">
-        <Hint className="mb-5">
-          Se eliminará la carpeta <code className="text-ink">historial/{borrar?.carpeta}/</code>
-          {' '}entera, con su red neuronal y su histórico. No se puede deshacer.
-        </Hint>
-        <div className="flex justify-end gap-2">
-          <Button onClick={() => setBorrar(null)}>Cancelar</Button>
-          <Button variant="danger" onClick={confirmarBorrado}>Sí, borrar</Button>
-        </div>
-      </Modal>
+      {/* Renombrar y borrar viven en components/ModelDialogs.jsx: la cola de
+          entrenamiento usa exactamente los mismos, con la misma llamada a la API
+          y los mismos textos. */}
+      <RenameModelModal model={renombrar} onClose={() => setRenombrar(null)}
+                        onDone={onChanged} />
+      <DeleteModelModal model={borrar} onClose={() => setBorrar(null)}
+                        onDone={onChanged} />
 
       {/* --- Vaciar historial --- */}
       <Modal open={vaciar} onClose={() => setVaciar(false)} danger title="¡Cuidado!">
