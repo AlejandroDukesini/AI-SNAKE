@@ -18,7 +18,12 @@
   <img alt="Tailwind v4" src="https://img.shields.io/badge/Tailwind-v4-38BDF8?style=flat-square&logo=tailwindcss&logoColor=white">
 </p>
 
-**📖 [Prueba Técnica](TECHNICAL_PROOF.md)** · **📐 [Planificación Estratégica](PLANNING.md)** · **🖥️ Documentación en la app** (vista *Documentación*) · **🌐 [Demo en vivo](https://ai-snake-nine.vercel.app/)**
+<p>
+  <a href="https://ia-snake.netlify.app/"><img alt="Netlify" src="https://img.shields.io/badge/Netlify-en_vivo-00C7B7?style=flat-square&logo=netlify&logoColor=white"></a>
+  <a href="https://ai-snake-nine.vercel.app/"><img alt="Vercel" src="https://img.shields.io/badge/Vercel-en_vivo-000000?style=flat-square&logo=vercel&logoColor=white"></a>
+</p>
+
+**📖 [Prueba Técnica](TECHNICAL_PROOF.md)** · **📐 [Planificación Estratégica](PLANNING.md)** · **🖥️ Documentación en la app** (vista *Documentación*) · **🌐 Demos:** [Netlify](https://ia-snake.netlify.app/) · [Vercel](https://ai-snake-nine.vercel.app/)
 
 </div>
 
