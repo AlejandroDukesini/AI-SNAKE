@@ -16,11 +16,13 @@ import PlayView from './views/PlayView';
 import TrainView from './views/TrainView';
 import HistoryView from './views/HistoryView';
 import ConfigView from './views/ConfigView';
+import DocsView from './views/DocsView';
 
 const VISTAS = [
   { id: 'play',    label: 'Jugar' },
   { id: 'train',   label: 'Entrenar IA' },
   { id: 'history', label: 'Historial' },
+  { id: 'docs',    label: 'Documentación' },
   { id: 'config',  label: 'Configuración' },
 ];
 
@@ -131,6 +133,7 @@ export default function App() {
             <HistoryView theme={config.theme} grid={config.grid} models={models}
                          onChanged={cargarModels} />
           )}
+          {vista === 'docs' && <DocsView />}
           {vista === 'config' && (
             <ConfigView config={config} limits={meta.limits} grids={meta.grids}
                         onChange={cambiarConfig} />
