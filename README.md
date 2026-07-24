@@ -23,7 +23,7 @@
   <a href="https://ai-snake-nine.vercel.app/"><img alt="Vercel" src="https://img.shields.io/badge/Vercel-en_vivo-000000?style=flat-square&logo=vercel&logoColor=white"></a>
 </p>
 
-**📖 [Prueba Técnica](TECHNICAL_PROOF.md)** · **📐 [Planificación Estratégica](PLANNING.md)** · **🖥️ Documentación en la app** (vista *Documentación*) · **🌐 Demos:** [Netlify](https://ia-snake.netlify.app/) · [Vercel](https://ai-snake-nine.vercel.app/)
+**📖 [Prueba Técnica](TECHNICAL_PROOF.md)** · **📐 [Planificación Estratégica](PLANNING.md)** · **🧩 [Motores de Red](ENGINES.md)** · **🖥️ Documentación en la app** (vista *Documentación*) · **🌐 Demos:** [Netlify](https://ia-snake.netlify.app/) · [Vercel](https://ai-snake-nine.vercel.app/)
 
 </div>
 
@@ -54,6 +54,23 @@ niveles. El nivel es **monótono**: solo sube o se mantiene, nunca baja por una 
 |:--:|:--:|:--:|:--:|:--:|:--:|
 | Supervivencia | Forrajeo básico | Forrajeo fiable | Conciencia espacial | Planificación emergente | Casi óptimo |
 | < 10 % | 10–20 % | 20–35 % | 35–55 % | 55–80 % | > 80 % |
+
+---
+
+## 🧩 Motores de red seleccionables
+
+El cerebro es **modular**: antes de cada evolución eliges la arquitectura de la red. Mismos 26
+sensores, mismo juego, mismo algoritmo genético — solo cambia la topología y su coste. La población
+(`num_individuos`) también es configurable por entrenamiento (4–100 agentes).
+
+| Motor | Arquitectura | Enfoque | CPU | Mutación |
+| --- | --- | --- | --- | --- |
+| **`advanced`** | 26 → 32 → 16 → 3 | Deep learning eficiente: abstracción espacial, converge antes | Media-alta | Rápida |
+| **`intermated`** | 26 → 20 → 3 (recurrente) | Genético clásico, **por defecto**: ADN compacto, memoria | Baja | Muy eficiente |
+| **`basic`** | 26 → 52 → 26 → 1 | Teórico/expansivo: salida por rangos, máxima expresividad | Alta | Lenta |
+
+Se elige en **Entrenar IA → Motor de red**. Continuar un linaje conserva su motor.
+Detalle completo —viabilidad científica, funcionamiento y guía— en **[ENGINES.md](ENGINES.md)**.
 
 ---
 

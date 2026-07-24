@@ -70,6 +70,7 @@ function ModelRow({ m, index, onProbar, onFavorito, onRenombrar, onBorrar }) {
         <div className="text-xs text-muted mt-0.5">
           historial/{m.carpeta}/ · {generacionesTexto(m.generaciones)} ·
           {' '}tamaño {m.length} · tablero {m.grid}×{m.grid}
+          {m.engine && <> · motor {m.engine}</>}
           {m.cobertura != null && <> · cobertura {(m.cobertura * 100).toFixed(1)}%</>}
         </div>
         <div className="text-xs text-muted">

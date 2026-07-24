@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Board from '../components/Board';
 import AIQueue from '../components/AIQueue';
-import { Panel, Title, Hint, Stat, Button, Field, LevelBadge, RangeField, Toggle }
+import { Panel, Title, Hint, Stat, Button, Field, LevelBadge, RangeField, Toggle, Segmented }
   from '../components/ui';
 import { api, wsURL } from '../lib/api';
 import { useLocalState } from '../lib/useLocalState';
@@ -45,7 +45,8 @@ function duracion(ms) {
   return h > 0 ? `${h}:${dosDigitos(m)}:${dosDigitos(s)}` : `${m}:${dosDigitos(s)}`;
 }
 
-export default function TrainView({ theme, config, limits = {}, models, onSaved }) {
+export default function TrainView({ theme, config, limits = {}, engines = [],
+                                   defaultEngine, models, onSaved }) {
   const [nombre, setNombre] = useState('');
   const [generaciones, setGeneraciones] = useState(config.generations);
   const [existente, setExistente] = useState(null);   // Modelo si el nombre ya existe
@@ -71,6 +72,14 @@ export default function TrainView({ theme, config, limits = {}, models, onSaved 
   const [herencias, setHerencias] = useLocalState('entrenar-herencias',
     limits.default_elite ?? 3);
   const [infinito, setInfinito] = useState(false);
+
+  /* Motor de red (arquitectura del cerebro) para los especimenes NUEVOS. Se
+     recuerda entre sesiones como el resto de decisiones de trabajo. Al continuar
+     un linaje existente NO se usa: cada IA conserva la arquitectura con la que
+     nacio (el servidor lo impone), asi que aqui solo manda para IAs nuevas. */
+  const [engine, setEngine] = useLocalState('entrenar-engine',
+    defaultEngine || 'intermated');
+  const engineSel = engines.find((e) => e.id === engine);
 
   const cola = useTrainingQueue(models);
   const { seleccionadas } = cola;
@@ -166,6 +175,9 @@ export default function TrainView({ theme, config, limits = {}, models, onSaved 
         agents: agentes,
         elite: herenciasEfectivas,
         infinite: infinito,
+        // Solo se aplica a IAs nuevas: si el nombre ya existe, el servidor
+        // conserva el motor del linaje e ignora este valor.
+        engine,
       }));
     };
 
@@ -222,7 +234,7 @@ export default function TrainView({ theme, config, limits = {}, models, onSaved 
       siguienteRef.current();
     };
     ws.onerror = () => setEstado('Error de conexión con el servidor de la IA.');
-  }, [generaciones, config.grid, agentes, herenciasEfectivas, infinito, onSaved, anotar]);
+  }, [generaciones, config.grid, agentes, herenciasEfectivas, infinito, engine, onSaved, anotar]);
 
   /* Toma la siguiente IA pendiente. Si no queda ninguna (o se abortó), cierra
      el ciclo y devuelve los controles. */
@@ -331,6 +343,40 @@ export default function TrainView({ theme, config, limits = {}, models, onSaved 
                        disabled:opacity-40"
           />
         </Field>
+
+        {/* --- Motor de red: la arquitectura del cerebro que evolucionara ---
+            Solo elegible para especimenes NUEVOS. Al continuar un linaje se
+            muestra el suyo, heredado: no se puede cambiar de arquitectura a
+            medias sin tirar todo lo aprendido. */}
+        {engines.length > 0 && (
+          <Field
+            label="Motor de red"
+            help={
+              existente
+                ? 'Este linaje conserva su motor: no se puede cambiar la arquitectura de una IA a medias.'
+                : engineSel
+                  ? `${engineSel.arch} — ${engineSel.resumen}`
+                  : 'Arquitectura del cerebro que evolucionará.'
+            }
+          >
+            {existente ? (
+              <div className="inline-flex items-center gap-2 bg-surface2 border border-line
+                              rounded-xl px-4 py-2.5 text-sm text-ink">
+                🧠 {engines.find((e) => e.id === (existente.engine || 'intermated'))?.label
+                     || 'Intermated'}
+                <span className="text-muted text-xs">· heredado</span>
+              </div>
+            ) : (
+              <div className={entrenando ? 'opacity-40 pointer-events-none' : ''}>
+                <Segmented
+                  value={engine}
+                  onChange={setEngine}
+                  options={engines.map((e) => ({ value: e.id, label: e.label }))}
+                />
+              </div>
+            )}
+          </Field>
+        )}
 
         {/* Administracion de IAs: seleccion, orden, renombrado y borrado. */}
         <AIQueue cola={cola} bloqueada={entrenando} onCambiado={onSaved} />

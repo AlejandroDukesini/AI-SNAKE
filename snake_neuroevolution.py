@@ -9,7 +9,9 @@ LICENCIA -> VER ARCHIVO LICENCE
   Este modulo es el CEREBRO del proyecto y no sabe nada de interfaces: ni web,
   ni WebSocket, ni React. Solo matematicas con NumPy.
 
-    - `NeuralNetwork`  red RECURRENTE 26 -> 20 -> 3 (vision ampliada + memoria)
+    - `Brain` (+ motores)  tres arquitecturas seleccionables sobre 26 entradas:
+        intermated 26->20->3 recurrente (por defecto), advanced 26->32->16->3,
+        basic 26->52->26->1. Ver ENGINES.md.
     - `Snake`          el agente: sensores, movimiento, tamano y fitness
     - `crossover` / `mutate` / `next_generation`   algoritmo genetico
     - `train`          la neuroevolucion completa, con herencia de linaje
@@ -187,76 +189,130 @@ def clamp_elite(value, pop_size=POP_SIZE):
 
 
 # =============================================================================
-#  RED NEURONAL RECURRENTE (numpy)
+#  MOTORES DE RED NEURONAL (numpy) — arquitectura modular y seleccionable
 # =============================================================================
-class NeuralNetwork:
-    """Red recurrente: entrada + estado anterior -> capa oculta (ReLU) -> salida.
+#  El juego, los sensores (26 entradas) y el algoritmo genetico son SIEMPRE los
+#  mismos. Lo unico que cambia entre motores es la topologia de la red y como su
+#  salida se traduce en un giro. Por eso el GA no conoce ninguna arquitectura:
+#  opera sobre `get_weights()` (una lista de arrays) y reconstruye una red del
+#  MISMO motor con `type(padre)(pesos_hijo)`. Anadir un motor nuevo es escribir
+#  una subclase; no se toca ni el simulador ni la evolucion.
+#
+#  Los tres motores comparten entrada (26) y accion (0=recto, 1=izquierda,
+#  2=derecha), asi que son intercambiables como cerebro de un `Snake`:
+#    - intermated  26 -> 20 -> 3            recurrente (el motor de siempre)
+#    - advanced    26 -> 32 -> 16 -> 3      feedforward profundo
+#    - basic       26 -> 52 -> 26 -> 1      feedforward ancho, salida por rangos
+# =============================================================================
+class Brain:
+    """Contrato comun a los tres motores. Las subclases definen `_keys` (nombres
+    de sus matrices en orden), `_random_weights()` y `forward(x) -> accion`.
 
-    La capa oculta se realimenta a si misma a traves de `W_rec`: en cada turno ve
-    las entradas del momento Y su propio estado del turno anterior. Eso le da
-    MEMORIA dentro de una partida (recordar por donde venia), el ingrediente que
-    la planificacion emergente (N4) necesita y que una feedforward pura no tiene.
-
-    `W_rec` nace a CERO: una red recien creada se comporta exactamente como una
-    feedforward, y la mutacion va introduciendo memoria poco a poco. Asi anadir
-    recurrencia no degrada nada de lo ya aprendido (ver `from_dict`).
+    El resto -clonar, serializar, exponer pesos al GA- es identico para todos y
+    vive aqui una sola vez. `NAME` es la etiqueta que se guarda en el JSON del
+    especimen para poder reconstruir el motor correcto al recargarlo.
     """
 
+    NAME = "base"
+    _keys = ()
+
     def __init__(self, weights=None):
-        """Crea la red. Sin pesos, los inicializa (init He; memoria a cero);
-        con `weights`, reutiliza los dados (hijos del algoritmo genetico)."""
+        """Sin pesos, los inicializa (init He); con `weights`, reutiliza los dados
+        (hijos del algoritmo genetico o modelo recargado)."""
         if weights is None:
-            self.W1 = np.random.randn(N_HIDDEN, N_INPUTS) * np.sqrt(2.0 / N_INPUTS)
-            self.b1 = np.zeros(N_HIDDEN)
-            self.W_rec = np.zeros((N_HIDDEN, N_HIDDEN))   # Sin memoria al nacer
-            self.W2 = np.random.randn(N_OUTPUTS, N_HIDDEN) * np.sqrt(2.0 / N_HIDDEN)
-            self.b2 = np.zeros(N_OUTPUTS)
-        else:
-            self.W1, self.b1, self.W_rec, self.W2, self.b2 = weights
-        self.h = np.zeros(N_HIDDEN)   # Estado oculto: la memoria intra-partida
+            weights = self._random_weights()
+        for clave, w in zip(self._keys, weights):
+            setattr(self, clave, w)
+        self._on_init()
+
+    def _on_init(self):
+        """Gancho tras fijar los pesos. Feedforward no lo necesita; los motores
+        con memoria lo usan para arrancar su estado oculto."""
+
+    def _random_weights(self):
+        raise NotImplementedError
 
     def reset_state(self):
-        """Olvida la memoria: cada partida arranca con el estado oculto a cero."""
-        self.h = np.zeros(N_HIDDEN)
+        """Feedforward no tiene memoria que reiniciar; el motor recurrente lo
+        redefine para olvidar su estado oculto al empezar cada partida."""
 
     def forward(self, x):
-        """Propaga las entradas (mas el estado anterior) y devuelve la accion:
-        0=Recto, 1=Girar izquierda, 2=Girar derecha (indice de la salida maxima)."""
-        # La capa oculta ve la entrada Y su propio estado previo (memoria).
-        h = np.maximum(0.0, self.W1 @ x + self.b1 + self.W_rec @ self.h)
-        self.h = h                                    # Se recuerda para el turno siguiente
-        o = self.W2 @ h + self.b2                     # Capa de salida lineal
-        return int(np.argmax(o))
+        raise NotImplementedError
 
     def get_weights(self):
-        """Devuelve una copia de todos los pesos y sesgos como lista de arrays."""
-        return [self.W1.copy(), self.b1.copy(), self.W_rec.copy(),
-                self.W2.copy(), self.b2.copy()]
+        """Copia de todas las matrices, en el orden de `_keys`. Es lo unico que el
+        algoritmo genetico necesita conocer del motor."""
+        return [getattr(self, k).copy() for k in self._keys]
 
     def clone(self):
-        """Crea una red nueva e independiente con los mismos pesos (memoria limpia)."""
-        return NeuralNetwork(self.get_weights())
+        """Red nueva e independiente con los mismos pesos (memoria limpia)."""
+        return type(self)(self.get_weights())
 
     def to_dict(self):
-        """Serializa los pesos a listas de Python para poder guardarlos en JSON."""
-        return {"W1": self.W1.tolist(), "b1": self.b1.tolist(),
-                "W_rec": self.W_rec.tolist(),
-                "W2": self.W2.tolist(), "b2": self.b2.tolist()}
+        """Serializa los pesos a listas de Python, sellando el motor para poder
+        reconstruir la arquitectura correcta al recargar (ver `brain_from_dict`)."""
+        d = {k: getattr(self, k).tolist() for k in self._keys}
+        d["engine"] = self.NAME
+        return d
 
     @classmethod
     def from_dict(cls, d):
-        """Reconstruye una red desde `to_dict`, ADAPTANDOLA a la arquitectura
-        actual sea cual sea el tamano con que se guardo.
+        """Reconstruye la red desde `to_dict`. Por defecto carga los pesos tal
+        cual; `IntermatedNetwork` lo redefine para ADAPTAR modelos antiguos."""
+        return cls([np.array(d[k], dtype=np.float64) for k in cls._keys])
+
+
+class IntermatedNetwork(Brain):
+    """Motor `intermated` — Algoritmo Genetico clasico (el de siempre).
+
+    Red RECURRENTE 26 -> 20 -> 3: la capa oculta se realimenta a traves de
+    `W_rec`, viendo en cada turno la entrada Y su propio estado anterior. Eso le
+    da MEMORIA intra-partida, el ingrediente de la planificacion emergente (N4).
+    `W_rec` nace a CERO (se comporta como feedforward) y la mutacion la introduce
+    poco a poco, asi que anadir memoria no degrada lo aprendido.
+
+    ADN compacto (pocos pesos): reduce el espacio de busqueda del GA y aprende con
+    un consumo de CPU muy bajo. Es el motor por defecto y el unico con el que se
+    entrenaron los especimenes previos, por eso conserva la carga adaptativa.
+    """
+
+    NAME = "intermated"
+    _keys = ("W1", "b1", "W_rec", "W2", "b2")
+    HIDDEN = N_HIDDEN            # 20
+
+    def _random_weights(self):
+        return [
+            np.random.randn(self.HIDDEN, N_INPUTS) * np.sqrt(2.0 / N_INPUTS),
+            np.zeros(self.HIDDEN),
+            np.zeros((self.HIDDEN, self.HIDDEN)),   # Sin memoria al nacer
+            np.random.randn(N_OUTPUTS, self.HIDDEN) * np.sqrt(2.0 / self.HIDDEN),
+            np.zeros(N_OUTPUTS),
+        ]
+
+    def _on_init(self):
+        self.h = np.zeros(self.HIDDEN)      # Estado oculto: memoria intra-partida
+
+    def reset_state(self):
+        self.h = np.zeros(self.HIDDEN)
+
+    def forward(self, x):
+        # La capa oculta ve la entrada Y su propio estado previo (memoria).
+        h = np.maximum(0.0, self.W1 @ x + self.b1 + self.W_rec @ self.h)
+        self.h = h                          # Se recuerda para el turno siguiente
+        o = self.W2 @ h + self.b2           # Capa de salida lineal
+        return int(np.argmax(o))
+
+    @classmethod
+    def from_dict(cls, d):
+        """Reconstruye ADAPTANDO cualquier tamano guardado a la arquitectura
+        actual sin alterar la salida para las entradas que ya existian.
 
         Los especimenes viejos tienen menos entradas (9 o 10), menos neuronas
-        ocultas (12) y NINGUNA conexion recurrente frente a la red de ahora
-        (26 -> 20 -> 3 con memoria). Se copian sus pesos en la esquina de una red
-        nueva y TODO lo demas se deja NEUTRO: las entradas nuevas con peso cero
-        (no influyen), las neuronas nuevas con salida cero (no aportan) y la
-        memoria a cero (se comporta como feedforward). Asi la red decide
-        EXACTAMENTE lo mismo que antes de crecer, y la mutacion se encarga luego
-        de dar uso a la capacidad nueva. Consecuencia: seguir entrenando nunca
-        degrada lo aprendido, ni siquiera al agrandar el cerebro entre versiones.
+        ocultas (12) y ninguna conexion recurrente. Se copian sus pesos en la
+        esquina de una red nueva y el resto queda NEUTRO (entradas nuevas a cero,
+        neuronas nuevas con salida cero, memoria a cero): la red decide lo mismo
+        que antes de crecer y la mutacion da uso luego a la capacidad nueva. Por
+        eso seguir entrenando nunca degrada lo aprendido, ni al cambiar de version.
         """
         W1 = np.array(d["W1"], dtype=np.float64)
         b1 = np.array(d["b1"], dtype=np.float64)
@@ -267,32 +323,25 @@ class NeuralNetwork:
 
     @staticmethod
     def _adapt_weights(W1, b1, W2, b2, W_rec=None):
-        """Encaja pesos de cualquier tamano en la arquitectura actual sin alterar
-        la salida para las entradas que ya existian (ver `from_dict`)."""
+        """Encaja pesos de cualquier tamano en 26 -> 20 -> 3 sin cambiar la
+        decision para las entradas heredadas (ver `from_dict`)."""
         h_old, in_old = W1.shape
         out_old      = W2.shape[0]
         h_copy   = min(h_old, N_HIDDEN)
         in_copy  = min(in_old, N_INPUTS)
         out_copy = min(out_old, N_OUTPUTS)
 
-        # Red nueva: capa oculta con init He; SALIDA a cero => las neuronas que
-        # no se hereden empiezan siendo neutras (no aportan hasta que muten).
-        # Memoria (W_rec) a cero => sin recurrencia hasta que la mutacion la cree.
         nW1 = np.random.randn(N_HIDDEN, N_INPUTS) * np.sqrt(2.0 / N_INPUTS)
         nb1 = np.zeros(N_HIDDEN)
         nW_rec = np.zeros((N_HIDDEN, N_HIDDEN))
         nW2 = np.zeros((N_OUTPUTS, N_HIDDEN))
         nb2 = np.zeros(N_OUTPUTS)
 
-        # Neuronas heredadas: conservan sus pesos, pero IGNORAN los sensores
-        # nuevos (sus columnas nuevas quedan a cero) para no cambiar de decision.
         nW1[:h_copy, :in_copy] = W1[:h_copy, :in_copy]
         nW1[:h_copy, in_copy:] = 0.0
         nb1[:h_copy]           = b1[:h_copy]
         nW2[:out_copy, :h_copy] = W2[:out_copy, :h_copy]
         nb2[:out_copy]          = b2[:out_copy]
-        # Recurrencia heredada (si el modelo guardado ya la tenia); si no, queda
-        # a cero y la red se comporta como la feedforward que era.
         if W_rec is not None:
             hr = min(W_rec.shape[0], N_HIDDEN)
             hc = min(W_rec.shape[1], N_HIDDEN)
@@ -300,27 +349,149 @@ class NeuralNetwork:
         return [nW1, nb1, nW_rec, nW2, nb2]
 
 
+class AdvancedNetwork(Brain):
+    """Motor `advanced` — Deep Learning eficiente.
+
+    Feedforward 26 -> 32 -> 16 -> 3 con dos capas ocultas (ReLU). Mas capacidad de
+    abstraccion espacial: las dos capas comprimen la percepcion en rasgos de alto
+    nivel ("hay un callejon a mi izquierda") que ayudan a la serpiente larga a no
+    encerrarse. Converge en menos generaciones a costa de mas pesos y mas CPU por
+    inferencia. Decide por argmax de las 3 salidas, igual que `intermated`.
+    """
+
+    NAME = "advanced"
+    _keys = ("W1", "b1", "W2", "b2", "W3", "b3")
+    H1, H2 = 32, 16
+
+    def _random_weights(self):
+        return [
+            np.random.randn(self.H1, N_INPUTS) * np.sqrt(2.0 / N_INPUTS),
+            np.zeros(self.H1),
+            np.random.randn(self.H2, self.H1) * np.sqrt(2.0 / self.H1),
+            np.zeros(self.H2),
+            np.random.randn(N_OUTPUTS, self.H2) * np.sqrt(2.0 / self.H2),
+            np.zeros(N_OUTPUTS),
+        ]
+
+    def forward(self, x):
+        h1 = np.maximum(0.0, self.W1 @ x + self.b1)
+        h2 = np.maximum(0.0, self.W2 @ h1 + self.b2)
+        o  = self.W3 @ h2 + self.b3
+        return int(np.argmax(o))
+
+
+class BasicNetwork(Brain):
+    """Motor `basic` — teorico / expansivo.
+
+    Feedforward 26 -> 52 -> 26 -> 1 siguiendo la regla clasica de que la primera
+    capa oculta duplica la entrada. Al tener UNA sola salida, el giro se decide
+    por rangos sobre su valor aplastado a [0,1] con una sigmoide:
+        v < 1/3 -> izquierda   |   1/3 <= v <= 2/3 -> recto   |   v > 2/3 -> derecha
+    Es el motor con mas pesos: gran expresividad, pero un espacio de busqueda
+    enorme para el GA (muta mas lento) y mas coste de CPU. Util como referencia
+    teorica y para comparar contra los otros dos.
+    """
+
+    NAME = "basic"
+    _keys = ("W1", "b1", "W2", "b2", "W3", "b3")
+    H1, H2 = 52, 26
+
+    def _random_weights(self):
+        return [
+            np.random.randn(self.H1, N_INPUTS) * np.sqrt(2.0 / N_INPUTS),
+            np.zeros(self.H1),
+            np.random.randn(self.H2, self.H1) * np.sqrt(2.0 / self.H1),
+            np.zeros(self.H2),
+            np.random.randn(1, self.H2) * np.sqrt(2.0 / self.H2),
+            np.zeros(1),
+        ]
+
+    def forward(self, x):
+        h1 = np.maximum(0.0, self.W1 @ x + self.b1)
+        h2 = np.maximum(0.0, self.W2 @ h1 + self.b2)
+        raw = float((self.W3 @ h2 + self.b3)[0])    # Una sola salida
+        v = 1.0 / (1.0 + np.exp(-raw))              # Sigmoide -> [0,1]
+        if v < 1.0 / 3.0:
+            return 1                                # Izquierda
+        if v > 2.0 / 3.0:
+            return 2                                # Derecha
+        return 0                                    # Recto
+
+
+# --- Registro de motores -----------------------------------------------------
+#  Un solo sitio donde estan los tres. Anadir un motor = anadir su clase aqui.
+ENGINES = {c.NAME: c for c in (IntermatedNetwork, AdvancedNetwork, BasicNetwork)}
+DEFAULT_ENGINE = "intermated"
+
+# Metadatos para la interfaz y la documentacion (no afectan al calculo).
+ENGINE_INFO = {
+    "advanced": {
+        "label": "Advanced",
+        "arch": "26 → 32 → 16 → 3",
+        "resumen": "Deep learning eficiente: dos capas ocultas para abstraccion "
+                   "espacial. Converge en menos generaciones, mas CPU por paso.",
+    },
+    "intermated": {
+        "label": "Intermated",
+        "arch": "26 → 20 → 3",
+        "resumen": "Algoritmo genetico clasico (el de siempre): recurrente y "
+                   "compacto. ADN pequeno, aprende con muy poca CPU.",
+    },
+    "basic": {
+        "label": "Basic",
+        "arch": "26 → 52 → 26 → 1",
+        "resumen": "Teorico/expansivo: primera capa oculta duplica la entrada y "
+                   "una salida por rangos. Mucha expresividad, muta mas lento.",
+    },
+}
+
+# Retrocompatibilidad: el codigo (y los modelos) que hablan de `NeuralNetwork`
+# siguen funcionando y apuntan al motor por defecto, el de siempre.
+NeuralNetwork = IntermatedNetwork
+
+
+def clamp_engine(value):
+    """Normaliza el motor pedido: cualquier valor desconocido cae al de defecto."""
+    return value if value in ENGINES else DEFAULT_ENGINE
+
+
+def make_brain(engine=DEFAULT_ENGINE):
+    """Crea un cerebro nuevo (pesos aleatorios) del motor indicado."""
+    return ENGINES[clamp_engine(engine)]()
+
+
+def brain_from_dict(d):
+    """Reconstruye un cerebro desde su JSON, eligiendo el motor por su sello
+    `engine`. Sin sello (modelos anteriores a los motores) => `intermated`, que
+    ademas adapta cualquier tamano antiguo sin regresion."""
+    name = d.get("engine", DEFAULT_ENGINE) if isinstance(d, dict) else DEFAULT_ENGINE
+    return ENGINES.get(name, IntermatedNetwork).from_dict(d)
+
+
 def crossover(parent_a, parent_b):
-    """Crossover uniforme elemento a elemento entre los pesos de dos padres."""
+    """Crossover uniforme elemento a elemento entre los pesos de dos padres.
+
+    Agnostico del motor: cruza los arrays que expone `get_weights()` y reconstruye
+    un hijo del MISMO motor que los padres (la poblacion es homogenea)."""
     child_weights = []
     for wa, wb in zip(parent_a.get_weights(), parent_b.get_weights()):
         mask = np.random.rand(*wa.shape) < 0.5
         child_weights.append(np.where(mask, wa, wb))
-    return NeuralNetwork(child_weights)
+    return type(parent_a)(child_weights)
 
 
 def mutate(net, std=MUTATION_STD):
     """Mutacion gaussiana con probabilidad MUTATION_RATE por peso.
 
     `std` es la desviacion del ruido; el entrenamiento la baja cuando la
-    poblacion se estanca (recocido) para pasar de explorar a afinar.
-    """
+    poblacion se estanca (recocido) para pasar de explorar a afinar. Reconstruye
+    una red del mismo motor que la de entrada."""
     new_weights = []
     for w in net.get_weights():
         mask = np.random.rand(*w.shape) < MUTATION_RATE
         noise = np.random.randn(*w.shape) * std
         new_weights.append(w + mask * noise)
-    return NeuralNetwork(new_weights)
+    return type(net)(new_weights)
 
 
 # =============================================================================
@@ -624,16 +795,18 @@ def next_generation(pop, grid=DEFAULT_GRID, pop_size=POP_SIZE, mutation_std=MUTA
     return nueva
 
 
-def seed_population(seed_brain=None, grid=DEFAULT_GRID, pop_size=POP_SIZE):
+def seed_population(seed_brain=None, grid=DEFAULT_GRID, pop_size=POP_SIZE,
+                    engine=DEFAULT_ENGINE):
     """Poblacion inicial de un entrenamiento.
 
-    Sin `seed_brain` empieza de cero (especimen nuevo, pesos aleatorios). Con el,
-    hereda el linaje: un clon exacto -para no perder nunca lo aprendido- mas
-    variantes mutadas que exploran a su alrededor. Es lo que permite continuar
-    entrenando a un especimen guardado en vez de reiniciarlo.
+    Sin `seed_brain` empieza de cero (especimen nuevo): `pop_size` cerebros
+    aleatorios del `engine` elegido. Con `seed_brain`, hereda el linaje: un clon
+    exacto -para no perder nunca lo aprendido- mas variantes mutadas alrededor. En
+    ese caso el motor lo fija el propio `seed_brain` (no se puede cambiar la
+    arquitectura de un linaje a medias), asi que `engine` se ignora.
     """
     if seed_brain is None:
-        return [Snake(grid=grid) for _ in range(pop_size)]
+        return [Snake(make_brain(engine), grid=grid) for _ in range(pop_size)]
     poblacion = [Snake(seed_brain.clone(), grid=grid)]
     while len(poblacion) < pop_size:
         poblacion.append(Snake(mutate(seed_brain), grid=grid))
@@ -642,7 +815,7 @@ def seed_population(seed_brain=None, grid=DEFAULT_GRID, pop_size=POP_SIZE):
 
 def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
           seed_brain=None, on_event=None, elite=ELITE_COUNT, infinite=False,
-          stop_check=None, pause_check=None):
+          stop_check=None, pause_check=None, engine=DEFAULT_ENGINE):
     """Ejecuta la neuroevolucion durante `generations` generaciones (1 a 100), o
     SIN LIMITE si `infinite=True`.
 
@@ -683,7 +856,10 @@ def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
     grid = clamp_grid(grid)
     pop_size = clamp_pop_size(pop_size)
     elite = clamp_elite(elite, pop_size)
-    population = seed_population(seed_brain, grid, pop_size)
+    # Motor efectivo: al continuar un linaje se conserva SU arquitectura (no se
+    # puede cambiar a medias); solo un especimen nuevo estrena el motor pedido.
+    engine = seed_brain.NAME if seed_brain is not None else clamp_engine(engine)
+    population = seed_population(seed_brain, grid, pop_size, engine)
 
     best_fitness = -1
     best_brain   = population[0].brain.clone()
@@ -793,6 +969,7 @@ def train(generations=DEFAULT_GENERATIONS, grid=DEFAULT_GRID, pop_size=POP_SIZE,
         # que `storage.save_training` suma al historico del especimen.
         "generaciones":   gen,
         "grid":           grid,
+        "engine":         engine,
         "cobertura":      info["cobertura"],
         "nivel":          info["nivel"],
         "nivel_etiqueta": info["etiqueta"],

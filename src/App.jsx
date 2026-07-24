@@ -29,7 +29,7 @@ const VISTAS = [
 export default function App() {
   const [vista, setVista] = useState('play');
   const [config, setConfig] = useState(null);
-  const [meta, setMeta] = useState({ themes: [], grids: [], limits: {} });
+  const [meta, setMeta] = useState({ themes: [], grids: [], limits: {}, engines: [] });
   const [models, setModels] = useState([]);
   const [error, setError] = useState(null);
 
@@ -48,7 +48,8 @@ export default function App() {
       try {
         const data = await api.getConfig();
         setConfig({ ...data.config, pop_size: data.pop_size });
-        setMeta({ themes: data.themes, grids: data.grids, limits: data.limits });
+        setMeta({ themes: data.themes, grids: data.grids, limits: data.limits,
+                  engines: data.engines ?? [], defaultEngine: data.default_engine });
         await cargarModels();
       } catch (e) {
         setError(`No se pudo hablar con el servidor de la IA. ${e.message}`);
@@ -127,6 +128,7 @@ export default function App() {
           {vista === 'play' && <PlayView theme={config.theme} grid={config.grid} />}
           {vista === 'train' && (
             <TrainView theme={config.theme} config={config} limits={meta.limits}
+                       engines={meta.engines} defaultEngine={meta.defaultEngine}
                        models={models} onSaved={cargarModels} />
           )}
           {vista === 'history' && (

@@ -117,6 +117,10 @@ def get_config():
         "config": storage.load_config(),
         "themes": list(storage.THEMES),
         "grids":  list(ml.GRID_SIZES),
+        # Motores de red disponibles + el de por defecto. La UI construye su
+        # selector con esto, sin duplicar la lista de arquitecturas en React.
+        "engines":        [{"id": k, **v} for k, v in ml.ENGINE_INFO.items()],
+        "default_engine": ml.DEFAULT_ENGINE,
         "limits": {
             "min_generations": ml.MIN_GENERATIONS,
             "max_generations": ml.MAX_GENERATIONS,
@@ -267,12 +271,17 @@ async def ws_train(ws: WebSocket):
     grid        = ml.clamp_grid(peticion.get("grid", cfg["grid"]))
     agentes     = ml.clamp_pop_size(peticion.get("agents", ml.POP_SIZE))
     elite       = ml.clamp_elite(peticion.get("elite", ml.ELITE_COUNT), agentes)
+    engine      = ml.clamp_engine(peticion.get("engine", ml.DEFAULT_ENGINE))
     nombre      = peticion.get("nombre") or ml.random_name()
     carpeta     = storage.slugify(nombre)
 
-    # Si la carpeta ya existe se HEREDA su linaje; si no, nace de cero.
+    # Si la carpeta ya existe se HEREDA su linaje; si no, nace de cero. El
+    # dispatcher elige el motor correcto por el sello guardado en el JSON.
     previo = storage.load_model(carpeta)
-    seed_brain = ml.NeuralNetwork.from_dict(previo["pesos"]) if previo else None
+    seed_brain = ml.brain_from_dict(previo["pesos"]) if previo else None
+    # Motor efectivo: continuar un linaje conserva SU arquitectura; solo un
+    # especimen nuevo estrena el motor pedido en la interfaz.
+    engine_efectivo = seed_brain.NAME if seed_brain is not None else engine
 
     # Se devuelven los valores YA VALIDADOS, no los pedidos: si el usuario mando
     # 500 agentes y el nucleo los recorta a 100, la interfaz debe enterarse en vez
@@ -287,6 +296,7 @@ async def ws_train(ws: WebSocket):
         "infinito": infinito,
         "agents":   agentes,
         "elite":    elite,
+        "engine":   engine_efectivo,
     })
 
     def on_event(tipo, datos):
@@ -319,7 +329,7 @@ async def ws_train(ws: WebSocket):
             resultado = ml.train(generations=generations, grid=grid,
                                  pop_size=agentes, seed_brain=seed_brain,
                                  on_event=on_event, elite=elite,
-                                 infinite=infinito,
+                                 infinite=infinito, engine=engine,
                                  stop_check=parar.is_set,
                                  pause_check=esta_pausado)
             if resultado is None:
@@ -491,7 +501,7 @@ async def ws_demo(ws: WebSocket, carpeta: str):
         return
 
     grid = ml.clamp_grid(storage.load_config()["grid"])
-    brain = ml.NeuralNetwork.from_dict(modelo["pesos"])
+    brain = ml.brain_from_dict(modelo["pesos"])
     snake = ml.Snake(brain=brain.clone(), grid=grid)
 
     try:

@@ -123,35 +123,92 @@ const ENTRADAS = [
   },
 ];
 
+/* Los 3 motores de red seleccionables. Mismos 26 sensores y misma acción de
+   salida (recto/izq/der); solo cambia la topología interna y su coste. */
+const MOTORES = [
+  {
+    id: 'advanced', label: 'Advanced', arch: '26 → 32 → 16 → 3',
+    enfoque: 'Deep learning eficiente',
+    detalle: 'Dos capas ocultas (ReLU) que comprimen la percepción en rasgos de ' +
+      'alto nivel ("hay un callejón a mi izquierda"). Más abstracción espacial para ' +
+      'no encerrarse cuando es larga; converge en menos generaciones.',
+    cpu: 'Media-alta', adn: '≈ 1.400 pesos', muta: 'Rápida', salida: 'argmax de 3',
+  },
+  {
+    id: 'intermated', label: 'Intermated', arch: '26 → 20 → 3',
+    enfoque: 'Algoritmo genético clásico · por defecto',
+    detalle: 'Red recurrente compacta: la capa oculta se realimenta (W_rec = memoria ' +
+      'intra-partida). ADN pequeño que reduce el espacio de búsqueda del GA y aprende ' +
+      'con muy poca CPU. Es el motor de siempre y el único con especímenes previos.',
+    cpu: 'Baja', adn: '≈ 1.000 pesos', muta: 'Muy eficiente', salida: 'argmax de 3',
+  },
+  {
+    id: 'basic', label: 'Basic', arch: '26 → 52 → 26 → 1',
+    enfoque: 'Teórico / expansivo',
+    detalle: 'La primera capa oculta duplica la entrada (regla clásica). Una sola ' +
+      'salida decide el giro por rangos: <1/3 izquierda · medio recto · >2/3 derecha. ' +
+      'Máxima expresividad, pero un espacio de búsqueda enorme para el GA.',
+    cpu: 'Alta', adn: '≈ 2.800 pesos', muta: 'Lenta', salida: '1 valor por rangos',
+  },
+];
+
 function ModuloCerebro() {
   const [sel, setSel] = useState('rayos');
+  const [motor, setMotor] = useState('intermated');
   const activa = ENTRADAS.find((e) => e.id === sel);
+  const m = MOTORES.find((x) => x.id === motor);
 
   return (
     <div className="space-y-5">
       <Card
-        title="Arquitectura de la red: 26 → 20 → 3"
-        badge={<Badge tono="ok">✅ En producción</Badge>}
+        title="Tres motores de red, uno seleccionable por evolución"
+        badge={<Badge tono="info">interactivo</Badge>}
       >
         <Hint className="mb-4">
-          Cada serpiente lleva su propia red neuronal recurrente. Percibe con 26
-          entradas, piensa en una capa oculta de 20 neuronas con memoria y decide
-          una de 3 acciones.
+          El juego, los 26 sensores y el algoritmo genético son siempre los mismos.
+          Lo único que cambia entre motores es la <span className="text-ink">topología
+          del cerebro</span> y cómo su salida se traduce en un giro. Toca uno:
         </Hint>
 
-        <div className="grid grid-cols-3 gap-3 text-center">
-          {[
-            { n: 26, t: 'Entradas', s: 'percepción', tono: 'text-accent' },
-            { n: 20, t: 'Ocultas', s: 'recurrentes (W_rec)', tono: 'text-snake' },
-            { n: 3,  t: 'Salidas', s: 'recto · izq · der', tono: 'text-food' },
-          ].map((c) => (
-            <div key={c.t} className="bg-surface2 border border-line rounded-xl px-2 py-4">
-              <div className={`text-3xl font-semibold tabular-nums ${c.tono}`}>{c.n}</div>
-              <div className="text-sm text-ink mt-1">{c.t}</div>
-              <div className="text-xs text-muted mt-0.5">{c.s}</div>
-            </div>
+        <div className="grid gap-3 sm:grid-cols-3 mb-4">
+          {MOTORES.map((x) => (
+            <button
+              key={x.id}
+              onClick={() => setMotor(x.id)}
+              aria-pressed={motor === x.id}
+              className={`text-left p-4 rounded-panel border-2 transition
+                hover:-translate-y-0.5
+                ${motor === x.id ? 'border-accent' : 'border-line'}`}
+            >
+              <div className="text-sm font-medium text-ink">{x.label}</div>
+              <div className="text-xs text-accent tabular-nums mt-1">{x.arch}</div>
+              <div className="text-xs text-muted mt-1 leading-snug">{x.enfoque}</div>
+            </button>
           ))}
         </div>
+
+        <div className="bg-surface2 border border-line rounded-xl p-4">
+          <p className="text-sm text-muted leading-relaxed mb-3">{m.detalle}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { k: 'Uso de CPU', v: m.cpu },
+              { k: 'Tamaño del ADN', v: m.adn },
+              { k: 'Velocidad de mutación', v: m.muta },
+              { k: 'Salida', v: m.salida },
+            ].map((s) => (
+              <div key={s.k}>
+                <div className="text-xs text-muted">{s.k}</div>
+                <div className="text-sm text-ink mt-0.5">{s.v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Hint className="mt-3 text-xs">
+          Se elige en <span className="text-ink">Entrenar IA → Motor de red</span> antes de
+          lanzar la evolución. Continuar un linaje conserva su motor: no se puede cambiar la
+          arquitectura de una IA a medias sin tirar lo aprendido.
+        </Hint>
       </Card>
 
       <Card
@@ -482,7 +539,8 @@ export default function DocsView() {
         Fuentes: <code className="text-ink">snake_neuroevolution.py</code> ·{' '}
         <code className="text-ink">ai_server.py</code> ·{' '}
         <code className="text-ink">storage.py</code>. Detalle completo en{' '}
-        <code className="text-ink">TECHNICAL_PROOF.md</code> y{' '}
+        <code className="text-ink">TECHNICAL_PROOF.md</code>,{' '}
+        <code className="text-ink">ENGINES.md</code> y{' '}
         <code className="text-ink">PLANNING.md</code>.
       </p>
     </div>

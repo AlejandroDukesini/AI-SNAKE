@@ -224,6 +224,13 @@ def save_training(nombre, resultado):
         "cobertura", ml.cobertura(int(resultado["length"]), int(resultado["grid"]))))
     modelo["record_cobertura"] = max(float(modelo.get("record_cobertura", 0.0)), cob_ahora)
 
+    # Motor de red del especimen. Continuar un linaje conserva SU motor (no se
+    # puede cambiar la arquitectura a medias), asi que se prefiere el ya guardado;
+    # `train` lo devuelve ya resuelto. Los especimenes anteriores a los motores no
+    # lo tienen: se deja al de por defecto, que es justo con el que se entrenaron.
+    modelo["engine"] = (resultado.get("engine")
+                        or modelo.get("engine") or ml.DEFAULT_ENGINE)
+
     _write_json(os.path.join(model_dir(carpeta), MODEL_FILE), modelo)
 
     # Historico de scores: se anade SIEMPRE, aunque la tanda no batiera el record.
