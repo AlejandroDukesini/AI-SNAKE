@@ -42,7 +42,7 @@ export function Stat({ label, value, accent = false }) {
 }
 
 /* Insignia del nivel de inteligencia (N0…N5). El nivel lo calcula el servidor a
-   partir de la cobertura del tablero (ver plan.txt); aqui solo se pinta. Muestra
+   partir de la cobertura del tablero (ver docs/ROADMAP.md); aqui solo se pinta. Muestra
    el codigo corto (N2) y, al pasar el raton, la etiqueta completa. */
 export function LevelBadge({ nivel, etiqueta, className = '' }) {
   if (nivel === undefined || nivel === null) return null;
@@ -56,6 +56,16 @@ export function LevelBadge({ nivel, etiqueta, className = '' }) {
       🧠 {corto}
     </span>
   );
+}
+
+/* Rendimiento HABITUAL de un especimen: media de frutas por partida en las
+   semillas de prueba fijas (`eval`, ver snake_neuroevolution.evaluar). Es la
+   cifra que describe al modelo; el record de UNA partida no. null si no hay. */
+export function textoRendimiento(ev) {
+  if (!ev || typeof ev.frutas_media !== 'number') return null;
+  const ic = Array.isArray(ev.frutas_ic95) ? ` (IC95 ${ev.frutas_ic95[0]}–${ev.frutas_ic95[1]})` : '';
+  return `${ev.frutas_media} frutas/partida${ic} · mediana ${ev.frutas_mediana}`
+       + ` · ${ev.episodios} partidas en ${ev.grid}×${ev.grid}`;
 }
 
 const VARIANTES = {

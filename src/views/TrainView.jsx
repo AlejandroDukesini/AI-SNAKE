@@ -25,9 +25,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Board from '../components/Board';
 import AIQueue from '../components/AIQueue';
-import { Panel, Title, Hint, Stat, Button, Field, LevelBadge, RangeField, Toggle, Segmented }
+import { Panel, Title, Hint, Stat, Button, Field, LevelBadge, RangeField, Toggle, Segmented,
+  textoRendimiento }
   from '../components/ui';
-import { api, wsURL } from '../lib/api';
+import { api, openSocket } from '../lib/api';
 import { useLocalState } from '../lib/useLocalState';
 import { useTrainingQueue } from '../lib/useTrainingQueue';
 
@@ -157,7 +158,7 @@ export default function TrainView({ theme, config, limits = {}, engines = [],
   /* Abre UNA sesion de entrenamiento. Al terminar (por lo que sea) pasa el
      testigo a la siguiente IA de la cola a traves de `siguienteRef`. */
   const abrirSesion = useCallback((nombreIA) => {
-    const ws = new WebSocket(wsURL('/ws/train'));
+    const ws = openSocket('/ws/train');
     wsRef.current = ws;
     setEnCurso(nombreIA || '(nombre automático)');
     setPausado(false);
@@ -190,9 +191,11 @@ export default function TrainView({ theme, config, limits = {}, engines = [],
         const cuantas = msg.infinito
           ? 'sin límite de generaciones'
           : `${msg.generations} generaciones`;
+        const proto = msg.episodios_por_agente ? `, ${msg.episodios_por_agente} partidas por agente` : '';
+        const sem = msg.seed != null ? `, semilla ${msg.seed}` : '';
         setEstado(msg.continua
-          ? `Continuando el linaje de ${msg.nombre} (${cuantas}, ${msg.agents} agentes)…`
-          : `Evolucionando a ${msg.nombre} desde cero (${cuantas}, ${msg.agents} agentes)…`);
+          ? `Continuando el linaje de ${msg.nombre} (${cuantas}, ${msg.agents} agentes${proto}${sem})…`
+          : `Evolucionando a ${msg.nombre} desde cero (${cuantas}, ${msg.agents} agentes${proto}${sem})…`);
 
       } else if (msg.type === 'step') {
         setSnake(msg.snake);
@@ -207,15 +210,19 @@ export default function TrainView({ theme, config, limits = {}, engines = [],
 
       } else if (msg.type === 'stopping') {
         setDeteniendo(true);
-        setEstado('Cerrando la generación en curso para guardar…');
+        setEstado('Deteniendo: la generación a medias se descarta y se guardan las completas…');
 
       } else if (msg.type === 'done') {
         const m = msg.model;
         if (m.nivel != null) setNivel({ nivel: m.nivel, etiqueta: m.nivel_etiqueta, cobertura: m.cobertura });
-        const nivelTxt = m.nivel_etiqueta ? ` · ${m.nivel_etiqueta}` : '';
+        const rend = textoRendimiento(m.eval);
+        const rendTxt = rend ? ` · rendimiento validado: ${rend}` : '';
+        const ultima = m.sesiones?.[m.sesiones.length - 1];
+        const pesosTxt = msg.continua && ultima && ultima.pesos_actualizados === false
+          ? ' · ningún candidato superó al heredado en validación: se conservan sus pesos' : '';
         setEstado(msg.continua
-          ? `${m.nombre} acumula ya ${m.generaciones} generaciones · récord ${m.fitness}${nivelTxt}`
-          : `${m.nombre} guardada en historial/${m.carpeta}/ · récord ${m.fitness}${nivelTxt}`);
+          ? `${m.nombre} acumula ya ${m.generaciones} generaciones${rendTxt}${pesosTxt} · récord de 1 partida ${m.fitness}`
+          : `${m.nombre} guardada en historial/${m.carpeta}/${rendTxt} · récord de 1 partida ${m.fitness}`);
         onSaved?.();
 
       } else if (msg.type === 'cancelled') {
@@ -326,7 +333,11 @@ export default function TrainView({ theme, config, limits = {}, engines = [],
           label="Carpeta del espécimen"
           help={
             existente
-              ? `Ya existe: se CONTINUARÁ su linaje. Lleva ${existente.generaciones ?? '?'} generaciones y su récord es ${existente.fitness}.`
+              ? `Ya existe: se CONTINUARÁ su linaje. Lleva ${existente.generaciones ?? '?'} generaciones; `
+                + (textoRendimiento(existente.eval)
+                  ? `rendimiento validado ${textoRendimiento(existente.eval)}.`
+                  : `sin evaluación validada (récord de 1 partida: ${existente.fitness}).`)
+                + (existente.modelo_error ? ` ATENCIÓN: ${existente.modelo_error}` : '')
               : nombre.trim()
                 ? 'Nombre nuevo: se creará una carpeta y la IA nacerá desde cero.'
                 : 'Escribe un nombre o marca IAs en la cola. Si lo dejas vacío se genera uno.'
@@ -365,7 +376,7 @@ export default function TrainView({ theme, config, limits = {}, engines = [],
               <div className="inline-flex items-center gap-2 bg-surface2 border border-line
                               rounded-xl px-4 py-2.5 text-sm text-ink">
                 🧠 {engines.find((e) => e.id === (existente.engine || 'intermated'))?.label
-                     || 'Intermated'}
+                     || existente.engine || 'Intermated'}
                 <span className="text-muted text-xs">· heredado</span>
               </div>
             ) : (
@@ -484,7 +495,8 @@ export default function TrainView({ theme, config, limits = {}, engines = [],
 
         <div className="grid grid-cols-2 gap-3 mb-4">
           <Stat label="Generación" value={generacionTxt} />
-          <Stat label="Mejor fitness" value={progreso?.best_fitness ?? 0} accent />
+          <Stat label="Mejor partida (fitness)"
+                value={progreso?.best_fitness != null ? Math.round(progreso.best_fitness) : '—'} accent />
           <Stat label="Agentes activos"
                 value={progreso ? `${progreso.agent}/${progreso.pop_size}` : '—'} />
           {/* `ahora` deja de refrescarse al parar, asi que el cronometro se
@@ -492,11 +504,11 @@ export default function TrainView({ theme, config, limits = {}, engines = [],
           <Stat label="Tiempo" value={inicio ? duracion(ahora - inicio) : '—'} />
         </div>
 
-        {/* Nivel de inteligencia alcanzado (ver plan.txt): sube con la cobertura. */}
+        {/* Nivel de inteligencia alcanzado (ver docs/ROADMAP.md): sube con la cobertura. */}
         <div className="flex items-center justify-between gap-3 bg-surface2 border
                         border-line rounded-xl px-4 py-3 mb-4">
           <div>
-            <div className="text-xs text-muted">Nivel de inteligencia</div>
+            <div className="text-xs text-muted">Nivel por cobertura de su mejor partida (no es el rendimiento habitual)</div>
             <div className="text-sm text-ink mt-0.5">
               {nivel?.etiqueta ?? 'Aún sin entrenar'}
               {nivel?.cobertura != null &&
@@ -522,8 +534,12 @@ export default function TrainView({ theme, config, limits = {}, engines = [],
             {log.map((g) => (
               <div key={g.generation}
                    className="text-xs text-muted bg-surface2 rounded-lg px-3 py-1.5">
-                Gen {g.generation} · mejor <b className="text-accent">{g.best}</b>
-                {' '}· promedio {g.avg.toFixed(1)} · tamaño máx {g.best_length}
+                Gen {g.generation} · selección: mejor{' '}
+                <b className="text-accent">{g.best != null ? g.best.toFixed(0) : '—'}</b>
+                {' '}· promedio {g.avg != null ? g.avg.toFixed(1) : '—'}
+                {g.val_record != null && <> · récord validado {g.val_record.toFixed(0)}</>}
+                {' '}· tamaño máx {g.best_length}
+                {g.invalidos ? <> · {g.invalidos} inválidos</> : null}
               </div>
             ))}
           </div>

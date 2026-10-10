@@ -36,9 +36,10 @@ siguiente). El valor diferencial se sostiene en tres pilares:
 
 1. **Aprendizaje observable en vivo.** El usuario ve, en tiempo real por WebSocket, cómo la
    población evoluciona — no un log, sino el juego dibujándose.
-2. **Inteligencia medida, no declarada.** Una única métrica objetiva —la **cobertura**
-   (`longitud / (grid × grid)`)— clasifica a cada espécimen en niveles N0–N5. El nivel **solo
-   puede subir** entrenamiento a entrenamiento; una mala racha nunca degrada lo aprendido.
+2. **Rendimiento medido, no declarado.** Cada espécimen guarda su rendimiento **habitual** (media,
+   mediana, dispersión e IC 95 % de frutas por partida en 20 semillas de prueba fijas) separado del
+   **récord de una partida**. La cobertura (`longitud / (grid × grid)`) se resume en niveles
+   N0–N5: el nivel *típico* sale de la mediana de esas partidas; el *histórico*, de la mejor.
 3. **Herencia persistente.** Cada IA es una carpeta con su mejor linaje. Reentrenar un nombre
    existente **continúa** ese linaje, no lo reemplaza.
 
@@ -46,9 +47,9 @@ siguiente). El valor diferencial se sostiene en tres pilares:
 
 - **Educar/demostrar** cómo la selección natural produce comportamiento inteligente emergente.
 - **Servir como portafolio técnico** de dominio full-stack + ML clásico sin frameworks pesados.
-- **Garantizar honestidad metodológica:** todas las cifras de rendimiento son medidas y
-  reproducibles (`benchmarks/`), y la escalera de niveles distingue explícitamente "tener el
-  mecanismo" de "alcanzar la cobertura".
+- **Honestidad metodológica:** las cifras de rendimiento salen de `benchmarks/` con semillas fijas
+  (`audit_ia.py` deterministas, `experimento_ia.py` con varias semillas) y se comparan con una regla
+  voraz sin aprendizaje y con el azar. Ver [`auditoria-cientifica-ia.md`](auditoria-cientifica-ia.md).
 
 ### Casos de uso clave
 
@@ -127,13 +128,16 @@ controles **sin duplicar constantes** del núcleo).
 
 1. `TrainView` abre `WS /ws/train` y envía `{generations, grid, agents, elite, nombre, infinite}`.
 2. `ai_server` valida (clamps del núcleo), resuelve la carpeta (`slugify`) y decide **herencia**:
-   si existe, `seed_brain = NeuralNetwork.from_dict(previo)`; si no, población aleatoria.
+   si existe, `seed_brain = brain_from_dict(previo)`; si no, población aleatoria. Un modelo que no
+   se puede cargar (arquitectura desconocida, formas incompatibles, NaN) se **rechaza con un error**:
+   nunca se sustituye por una red aleatoria.
 3. La neuroevolución corre en un **hilo dedicado** (patrón productor/consumidor). El último
    fotograma se **sobrescribe** (`ultimo["step"]`), no se encola: el núcleo produce miles de
    pasos/s y al cliente solo le importa el más reciente → **sin backpressure**.
 4. El bucle emisor asyncio drena a `STREAM_FPS` (20 fps) y emite `step` / `gen` / `done`.
-5. Al terminar, `storage.save_training` acumula generaciones y **solo sustituye los pesos si se
-   batió el récord** (la evolución tiene azar; reentrenar nunca empeora tu IA).
+5. Al terminar, `storage.save_training` acumula generaciones y **solo sustituye los pesos si un
+   candidato superó al heredado en las semillas de validación** (`mejora_validada`). Eso evita
+   cambiar el cerebro por uno con suerte; no garantiza que el rendimiento real suba en cada tanda.
 
 ### Justificación técnica de la pila
 
@@ -184,20 +188,23 @@ Interfaz** de principio a fin, entregando una capacidad usable. El orden se infi
 
 ### Sprint 4 — Inteligencia "gratis" sin tocar arquitectura (Paso 2)
 - **Núcleo:** **fitness shaping** denso (acercarse/alejarse, asimétrico) + **mutación adaptativa**
-  (recocido por estancamiento). Desbloquea N1/N2.
-- **Entregable:** forrajeo intencionado sin cambiar la red.
+  (por estancamiento). Hipótesis de diseño: ayudar a pasar de N0 a N1/N2 (no medida por separado).
+- **Entregable:** señal de fitness para quien aún no come.
 
 ### Sprint 5 — Romper el techo perceptivo (Paso 4, adelantado por alto retorno)
 - **Núcleo:** percepción de **8 rayos egocéntricos × 3 rasgos + 2 sensores globales** (tamaño +
-  **flood-fill** de espacio libre) → entrada crece a **26**. Habilita N3 (conciencia espacial).
-- **Compatibilidad:** `NeuralNetwork.from_dict` **adapta redes viejas sin regresión** (pesos
-  nuevos a cero). `migrar_historial.py` convierte el formato legado.
-- **Entregable:** la IA deja de encerrarse; visión suficiente para planificar giros.
+  **flood-fill** de espacio libre) → entrada crece a **26**.
+- **Compatibilidad:** `IntermatedNetwork.from_dict` adapta redes de 9/10 entradas colocando cada
+  peso en la posición de su mismo sensor (verificado: misma decisión que la red original).
+  `migrar_historial.py` convierte el formato legado.
+- **Entregable:** más información sensorial (diagonales, espacio libre). Que la IA deje de
+  encerrarse **no está demostrado**: siguen siendo frecuentes las muertes contra el propio cuerpo
+  (80 % de las partidas de `PRUEBA-UNO`).
 
 ### Sprint 6 — Memoria (Paso 5a)
 - **Núcleo:** capa oculta **recurrente** (`W_rec`, estado que persiste entre turnos; nace a cero
-  = neutra). Mecanismo de N4 (planificación emergente).
-- **Entregable:** ingrediente para "recordar por dónde venía" sin degradar lo aprendido.
+  = neutra).
+- **Entregable:** memoria intra-partida. No hay métrica que muestre que la usa para planificar.
 
 ### Sprint 7 — Producción y cumplimiento
 - **Servidor:** `/health` (GET+HEAD), `0.0.0.0` + `$PORT`, sirve `dist/` en prod; CORS por lista
@@ -235,7 +242,7 @@ Interfaz** de principio a fin, entregando una capacidad usable. El orden se infi
 - **Cabeceras HTTP** (`vercel.json`): `X-Content-Type-Options: nosniff`,
   `Referrer-Policy: strict-origin-when-cross-origin`.
 
-### Rendimiento (medido, `benchmarks/bench_core.py`)
+### Rendimiento de cómputo (medido, `benchmarks/bench_core.py`; ver la auditoría para el coste del protocolo actual)
 
 | Métrica (8×8, pop 25) | Valor |
 | --- | --- |
@@ -323,13 +330,13 @@ Cómo explicárselo a cualquier desarrollador tradicional, de la interfaz a la b
 
 4. **La identidad de una IA es su carpeta (`storage.py`).** Cada espécimen = una carpeta con
    `modelo.json` (mejor linaje: pesos) + `sesiones.json` (histórico). Reentrenar un nombre
-   existente **hereda** sus pesos y **acumula** generaciones; el récord **solo sube**. `slugify`
+   existente **hereda** sus pesos y **acumula** generaciones; los pesos solo cambian con una mejora
+   validada y el récord de una partida es un máximo histórico. `slugify`
    protege el sistema de ficheros de nombres maliciosos.
 
-5. **La inteligencia se mide, no se declara.** Una sola regla —**cobertura** = `longitud /
-   (grid²)`— clasifica cada IA en niveles N0–N5. El nivel es **monótono** (`record_cobertura`):
-   una mala racha nunca lo baja. La hoja de ruta técnica (`ROADMAP.md`) documenta qué cambio de
-   arquitectura desbloquea cada nivel y separa "mecanismo listo" de "cobertura alcanzada".
+5. **El rendimiento se mide, no se declara.** El rendimiento habitual se evalúa en semillas de
+   prueba fijas que no intervienen en ninguna decisión; el récord de una partida y el nivel
+   histórico (`record_cobertura`, monótono) se muestran aparte y rotulados como tales.
 
 ---
 
@@ -372,9 +379,10 @@ conjunto de redes distintas compitiendo.
 | **Espacio libre alcanzable** | 1 | *Flood-fill* desde la cabeza: qué fracción del tablero puede aún recorrer. La señal anti-encierro. |
 | **Total** | **26** | |
 
-Los sensores están **normalizados** (`distancia / grid`), así que una red entrenada en 8×8
-también sabe jugar en 15×15 — el motivo por el que la demo y el juego pueden usar un tablero
-distinto al del entrenamiento.
+Los sensores están normalizados (`distancia / grid`) y son invariantes a rotación (verificado), pero
+**no a escala**: estar a una casilla de la pared vale 0,125 en 8×8 y 0,067 en 15×15. Una red
+entrenada en un tablero juega en otro con rendimiento distinto (medido en la auditoría): la demo
+puede usar otro tablero, pero lo que se ve no es su rendimiento de entrenamiento.
 
 ### Por qué NumPy puro y no PyTorch/TensorFlow
 
@@ -391,14 +399,15 @@ del proyecto. En ese régimen, un framework de deep learning es peso muerto:
 La capa oculta se realimenta con su propio estado del turno anterior:
 
 ```python
-h      = tanh(W1 @ x + W_rec @ h_prev + b1)   # h_prev = estado del turno anterior
+h      = relu(W1 @ x + W_rec @ h_prev + b1)   # h_prev = estado del turno anterior
 salida = W2 @ h + b2                           # recto | izquierda | derecha
 ```
 
 `W_rec` **nace a cero**: la red se comporta como una *feedforward* pura y la mutación va
-introduciendo la memoria poco a poco. Consecuencia clave: **añadir memoria no degrada nada de lo
-aprendido**, y `NeuralNetwork.from_dict` adapta redes antiguas a la arquitectura nueva copiando
-los pesos heredados y dejando `W_rec` a cero (sin regresión).
+introduciendo la memoria poco a poco: al nacer decide igual que una feedforward. El estado oculto
+se acota a `H_MAX = 10⁶` para que una `W_rec` expansiva no desborde a inf/NaN; si aun así una red
+produce un valor no finito, la partida se marca **inválida** (fitness −∞) y no se elige ninguna
+acción por defecto.
 
 ---
 
@@ -416,41 +425,54 @@ fitness = pasos + (tamaño − 3) × 1000 + shaping_de_acercamiento
 ```
 
 Crecer vale **mil veces** más que sobrevivir (`FRUIT_REWARD = 1000`), así que la evolución premia
-sobre todo comer. El `shaping` es una señal continua **asimétrica** (`APPROACH_REWARD = 3.0`,
-`APPROACH_PENALTY = 4.0`): alejarse penaliza algo más que acercarse premia, para desincentivar el
-merodeo en círculos y acelerar el salto de la supervivencia refleja al forrajeo intencionado.
+sobre todo comer. El `shaping` es asimétrico (`APPROACH_REWARD = 3.0`, `APPROACH_PENALTY = 4.0`).
+**Limitación medida:** como cada paso cambia la distancia Manhattan en ±1, en un bucle hay tantos
+pasos de acercamiento como de alejamiento y, con el +1 por paso, el fitness **sube +0,5 por paso**
+dando vueltas sin comer. La alternativa basada en potencial (+1/−1, sin premio por paso; Ng, Harada y
+Russell 1999) se probó y no rindió mejor, así que se conserva la original.
+
+### Protocolo de evaluación
+
+| Conjunto | Semillas | Para qué |
+| --- | --- | --- |
+| Selección | `EVAL_EPISODES = 3` comunes por generación | Todos los individuos (élite incluida) juegan las **mismas** partidas; su fitness de selección es la media. Comparable dentro de la generación. |
+| Validación | `VALIDATION_EPISODES = 10` fijas | El campeón de cada generación; decide qué cerebro se devuelve. Comparable **entre** generaciones; el récord validado nunca retrocede. |
+| Prueba | `TEST_EPISODES = 20` fijas | Rendimiento que se guarda y se muestra (`eval`). No interviene en ninguna decisión. |
+
+La élite pasa como el **mismo individuo**: conserva sus pesos y acumula sus evaluaciones. El
+entrenamiento usa generadores propios con semilla (`train(seed=…)`, guardada en cada sesión): con la
+misma semilla el resultado es idéntico.
 
 ### Los operadores
 
 | Operador | Constante | Qué hace |
 | --- | --- | --- |
-| **Elitismo** | `ELITE_COUNT = 3` | Las 3 mejores redes pasan **intactas** a la siguiente generación. |
-| **Selección por torneo** | `TOURNAMENT_K = 3` | Grupos de 3 al azar; gana el de mayor fitness. |
+| **Elitismo** | `ELITE_COUNT = 3` | Las 3 mejores redes pasan **intactas** a la siguiente generación (los inválidos nunca). |
+| **Selección por torneo** | `TOURNAMENT_K = 3` | Grupos de 3 al azar; gana el de mayor fitness de selección. |
 | **Cruce uniforme** | — | El hijo hereda cada peso de uno u otro padre. |
 | **Mutación gaussiana adaptativa** | `MUTATION_RATE = 0.05`, `MUTATION_STD = 0.20` | Un 5 % de los pesos se perturba con ruido gaussiano. |
-| **Recocido por estancamiento** | `STAGNATION_PATIENCE = 4`, `MUTATION_DECAY = 0.85`, `MUTATION_STD_MIN = 0.05` | Si el mejor fitness se estanca, la intensidad de mutación **baja sola**: de explorar a afinar, sin dejar de explorar del todo. |
+| **Decaimiento adaptativo de σ** | `STAGNATION_PATIENCE = 4`, `MUTATION_DECAY = 0.85`, `MUTATION_STD_MIN = 0.05` | Si el récord **validado** no mejora en 4 generaciones, σ se multiplica por 0,85 (suelo 0,05). No es recocido simulado: no hay temperatura ni aceptación de soluciones peores. |
 
-### La escalera de inteligencia (métrica objetiva)
+### Niveles por cobertura (métrica de resultado)
 
 ```
 cobertura = longitud / (grid × grid)      # fracción del tablero ocupada, 0.0 – 1.0
 ```
 
-Es **independiente del tamaño de tablero**, así que compara 8×8, 10×10 y 15×15 de forma justa.
+Es una fracción del tablero, así que se puede poner 8×8, 10×10 y 15×15 en la misma escala, aunque el
+mismo nivel exige muchas más frutas en un tablero grande (ver `ROADMAP.md`).
 
-| Nivel | Cobertura | Capacidad | Estado |
-| --- | --- | --- | --- |
-| **N0** Supervivencia refleja | < 10 % | Evita la pared; come por accidente. | ✅ punto de partida |
-| **N1** Forrajeo básico | 10–20 % | Se orienta hacia la comida sin azar. | ✅ alcanzable |
-| **N2** Forrajeo fiable | 20–35 % | Come consistente; deja de encerrarse en cuerpos cortos. | ✅ alcanzable |
-| **N3** Conciencia espacial | 35–55 % | Con cuerpo largo planifica giros. | ✅ habilitado (8 rayos + flood-fill) |
-| **N4** Planificación emergente | 55–80 % | Recorre el tablero sin encerrarse. | 🧩 mecanismo listo (memoria recurrente) |
-| **N5** Casi óptimo | > 80 % | Llena casi todo el tablero. | 🔬 I+D (visión CNN + evaluación vectorizada) |
+| Nivel | Cobertura | Observado (ver la auditoría) |
+| --- | --- | --- |
+| **N0** | < 10 % | Nivel **típico** de todos los especímenes medidos. |
+| **N1** | 10–20 % | Alcanzado en algunas partidas sueltas. |
+| **N2** | 20–35 % | Solo en partidas sueltas (un espécimen de 8×8, ~2 % de sus partidas). |
+| **N3–N5** | ≥ 35 % | No observado. |
 
-> **Honestidad metodológica.** El nivel **se mide** del resultado real de cada entrenamiento; no se
-> declara. Tener el *mecanismo* de un nivel (p. ej. memoria para N4) no equivale a **alcanzar** su
-> cobertura. El `record_cobertura` es **monótono** (persistido en `storage.py`): solo sube o se
-> mantiene, nunca baja por una mala racha evolutiva.
+> Las etiquetas describen solo la cobertura. Nombres anteriores como "conciencia espacial" o
+> "planificación emergente" describían capacidades que la métrica no mide y se retiraron. El
+> `record_cobertura` (nivel histórico) es monótono; el nivel típico puede bajar si los pesos
+> cambian, y es el que describe el rendimiento habitual.
 
 ---
 
@@ -538,10 +560,12 @@ Un nombre como `../../algo` queda reducido a caracteres seguros: **imposible esc
 
 - Cada espécimen es una **carpeta**: `modelo.json` (mejor linaje: pesos y sesgos) + `sesiones.json`
   (histórico, un registro por entrenamiento).
-- Reentrenar un nombre existente **acumula** generaciones, pero los pesos **solo se sustituyen si se
-  batió el récord** de fitness. La evolución tiene azar; una tanda peor **nunca** degrada la IA que
-  el usuario ya tenía.
-- `record_cobertura` es **monótono**: el nivel solo sube o se mantiene.
+- Reentrenar un nombre existente **acumula** generaciones, pero los pesos **solo se sustituyen si un
+  candidato supera al heredado en las semillas de validación**. Así una tanda con suerte no cambia
+  el cerebro; que el rendimiento real suba lo dice `eval`, no esta regla.
+- `record_cobertura` (nivel histórico, mejor partida) es monótono. El nivel típico sale de `eval`.
+- Una parada a mitad de generación **descarta** esa generación: solo cuentan las completas. La
+  población no se persiste, así que no hay reanudación; se guarda el mejor cerebro validado.
 
 ### Lectura tolerante a fallos
 

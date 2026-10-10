@@ -25,8 +25,12 @@ sensores y el mismo algoritmo genético (ver [`ENGINES.md`](ENGINES.md) y `snake
 - **Entradas (26):** 8 rayos egocéntricos × 3 rasgos (pared / cuerpo / alineación con la comida) = 24,
   + tamaño propio + espacio libre alcanzable (flood-fill).
 - **Algoritmo genético (común):** elitismo, selección por torneo (k=3), cruce uniforme, mutación
-  gaussiana adaptativa (recocido por estancamiento). Población configurable (4–100).
-- **Fitness:** `pasos + (tamaño−3)×1000 + shaping_de_acercamiento` (comer domina).
+  gaussiana con decaimiento adaptativo de σ por estancamiento. Población configurable (4–100).
+- **Evaluación:** 3 partidas con semillas comunes por individuo (selección), 10 semillas fijas para
+  validar al campeón y 20 semillas fijas de prueba para el rendimiento guardado (`eval`).
+- **Fitness:** `pasos + (tamaño−3)×1000 + shaping_de_acercamiento` (comer domina; premia +0,5/paso
+  los bucles sin comer, limitación conocida).
+- **Compatibilidad:** `advanced_v1` (26 → 32 → 16 → 3) solo para cargar especímenes antiguos.
 
 > El `advanced` se simplificó de una red profunda a una sola capa por evolvabilidad (ver
 > [`../CHANGELOG.md`](../CHANGELOG.md), ADR-002).
@@ -46,6 +50,10 @@ propia · eficiencia = frutas/pasos · generaciones hasta el primer fruto consis
 
 ## Línea base MEDIDA (números reales)
 
+> Las cifras de esta sección son de **cómputo** y se midieron con el protocolo anterior (1 partida
+> por individuo). Con el protocolo actual cada generación juega ~3× partidas (medido en la
+> auditoría: 2,6–3,6× pasos simulados por generación).
+
 *Fecha: 2026-07-17 · máquina del desarrollador · grid 8×8, pop 25 · `benchmarks/bench_core.py`
 (5 repeticiones).*
 
@@ -58,36 +66,53 @@ propia · eficiencia = frutas/pasos · generaciones hasta el primer fruto consis
 (**~9× más rápido**).
 
 El motor actual es ~9× más lento **por diseño**: cada paso ejecuta la red más un *flood-fill* del
-espacio alcanzable — el precio de la percepción (N3) y la memoria (N4). Sigue siendo de sobra
+espacio alcanzable — el precio de la percepción más rica y la memoria. Sigue siendo de sobra
 interactivo. El cuello de botella deja de ser el algoritmo y pasa a ser el **cómputo por paso** en
 Python puro.
 
-> **Tensión real que conviene documentar, no esconder:** el *flood-fill* que da la inteligencia
-> espacial es justo lo más difícil de vectorizar. Por eso "recuperar el 9× con vectorización" **no**
+> **Tensión real que conviene documentar, no esconder:** el *flood-fill* del sensor de espacio
+> libre es justo lo más difícil de vectorizar. Por eso "recuperar el 9× con vectorización" **no**
 > es un cambio de una línea: es rediseñar el simulador para que N agentes avancen en paralelo con
 > operaciones matriciales (ver **Paso 3**).
 
-**Ya implementado** (antes proyección, ahora parte del motor): fitness shaping denso (N1/N2) ·
-mutación adaptativa por estancamiento (N2) · visión de 8 rayos + espacio libre (N3, techo elevado) ·
-memoria recurrente `W_rec` (N4, mecanismo listo) · métrica de cobertura + clasificador de nivel
-persistido por espécimen y por sesión.
+**Ya implementado:** fitness shaping denso · decaimiento adaptativo de σ · visión de 8 rayos +
+espacio libre · memoria recurrente `W_rec` · cobertura y nivel persistidos · **protocolo de
+evaluación con semillas fijas** (selección / validación / prueba) · semilla de entrenamiento por
+sesión · carga explícita de modelos (`ModelError`).
 
-> **Honestidad sobre los niveles:** tener el *mecanismo* de un nivel (p. ej. memoria para N4) no es
-> lo mismo que *alcanzar* su cobertura. El nivel se mide del resultado real de cada entrenamiento; no
-> se declara.
+> **Honestidad sobre los niveles:** tener un *mecanismo* (sensores, memoria) no equivale a alcanzar
+> una cobertura. Ninguno de esos mecanismos ha demostrado por sí solo subir de nivel.
+
+## Estado MEDIDO (auditoría, 2026-10-10)
+
+Detalle, intervalos y semillas en [`auditoria-cientifica-ia.md`](auditoria-cientifica-ia.md), §16.
+
+- **Por encima del azar, por debajo de la regla voraz.** En 8×8, tras 40 generaciones, los tres
+  motores logran ~6–9 frutas por partida de media; la regla voraz sin aprendizaje, 15,7; el azar, 0,2. En
+  15×15 (intermated, 40–120 gen.): ~9–13 frente a 23,7.
+- **Nivel típico de todos los especímenes medidos: N0.** N1 y N2 solo en partidas sueltas.
+- **El protocolo nuevo no acelera el aprendizaje a igual cómputo**: frente al algoritmo anterior con
+  3× generaciones, las diferencias no son significativas. Sí da resultados más consistentes entre
+  entrenamientos y medidas fiables.
+- **Probado sin mejora:** fitness basado en potencial, quitar el cruce, torneo de 5, 5 partidas por
+  individuo.
 
 ---
 
-## Niveles de inteligencia (escalera de capacidad)
+## Niveles por cobertura (objetivos)
+
+> Las descripciones de la segunda columna son **objetivos de comportamiento**, no capacidades
+> observadas. La métrica solo mide cobertura; esos comportamientos no tienen todavía una métrica
+> propia que los demuestre.
 
 | Nivel | Capacidad | Criterio (cobertura) | Cómo se desbloquea |
 | --- | --- | --- | --- |
-| **N0** Supervivencia refleja | Evita la pared un rato; come por accidente. | < 0.10 | Punto de partida (pesos aleatorios). |
-| **N1** Forrajeo básico | Se orienta hacia la comida; come sin azar. | 0.10–0.20 | Ya soportado: más generaciones/población + shaping denso. |
-| **N2** Forrajeo fiable + anti-suicidio | Come consistente; deja de encerrarse en cuerpos cortos. | 0.20–0.35 | Mutación adaptativa (recocido) · elitismo/torneo mayores · currículum 8×8→10×10. |
-| **N3** Conciencia espacial | Con cuerpo largo planifica giros; empieza a "rodear" la comida. | 0.35–0.55 | **Más visión**: 8 rayos (hecho) + sensor de espacio libre (hecho). |
-| **N4** Planificación emergente | Recorre el tablero eficiente sin encerrarse ("camino seguro"). | 0.55–0.80 | Memoria recurrente (hecho) · NEAT topológico (I+D) · fitness multiobjetivo. |
-| **N5** Casi óptimo | Llena casi todo; ~ciclo hamiltoniano aprendido. | > 0.80 | Visión global por CNN · especiación/nichos · evaluación vectorizada. |
+| **N0** | Evita la pared un rato; come por accidente. | < 0.10 | Punto de partida (pesos aleatorios). |
+| **N1** | Se orienta hacia la comida; come sin azar. | 0.10–0.20 | Ya soportado: más generaciones/población + shaping denso. |
+| **N2** | Come consistente; deja de encerrarse en cuerpos cortos. | 0.20–0.35 | Por medir: currículum 8×8→10×10, poblaciones mayores (torneo mayor ya probado sin mejora). |
+| **N3** | Con cuerpo largo evita encerrarse; empieza a "rodear" la comida. | 0.35–0.55 | Sensores ya ampliados (8 rayos + espacio libre); no observado todavía. |
+| **N4** | Recorre el tablero eficiente sin encerrarse ("camino seguro"). | 0.55–0.80 | Memoria recurrente (hecho) · NEAT topológico (I+D) · fitness multiobjetivo. |
+| **N5** | Llena casi todo; ~ciclo hamiltoniano aprendido. | > 0.80 | Visión global por CNN · especiación/nichos · evaluación vectorizada. |
 
 ---
 
@@ -105,10 +130,12 @@ persistido por espécimen y por sesión.
 ## Orden recomendado de trabajo (mayor retorno primero)
 
 - ✅ **Paso 1 — Cobertura** como métrica de primera clase (persistida en `storage.py`). Sin métrica no hay progreso demostrable.
-- ✅ **Paso 2 — Fitness shaping denso + mutación adaptativa** → N1/N2 "gratis", sin tocar arquitectura.
-- ✅ **Paso 4 — Ampliar sensores** (8 rayos + espacio libre) → rompe el techo del forrajeo → N3. *(Se adelantó al Paso 3 por su alto retorno.)*
-- ✅ **Paso 5a — Memoria recurrente** (`W_rec`) → mecanismo de N4. Falta la parte topológica (NEAT).
-- ⏳ **Paso 3 — Evaluación vectorizada por lotes** (rediseño del simulador en NumPy) → poblaciones grandes sin coste y recupera el ~9× de la percepción rica. **Pendiente de mayor retorno hoy.**
+- ✅ **Paso 2 — Fitness shaping denso + mutación adaptativa** (implementado; su efecto aislado no está medido).
+- ✅ **Paso 4 — Ampliar sensores** (8 rayos + espacio libre) (implementado; N3 no observado).
+- ✅ **Paso 5a — Memoria recurrente** (`W_rec`) (implementado; uso para planificar no medido).
+- ✅ **Paso 1b — Protocolo de evaluación con semillas fijas** (selección / validación / prueba). Hace fiables las cifras; a igual cómputo no acelera el aprendizaje.
+- ⏳ **Paso 3 — Evaluación vectorizada por lotes** (rediseño del simulador en NumPy) → poblaciones grandes sin coste y recupera el ~9× de la percepción rica. **Pendiente de mayor retorno hoy**, más aún porque el protocolo fiable cuesta ~3× por generación.
+- ⏳ **Paso 3b — Diversidad** (nichos / especiación): la diversidad genética cae a ~30 % en 40 generaciones.
 - ⏳ **Paso 5b — Neuroevolución topológica** (NEAT) → afina N4.
 - ⏳ **Paso 6 — Visión CNN** del tablero completo → N5 (I+D; alcanzar >80% es un resultado de entrenamiento, no de código).
 
@@ -117,9 +144,9 @@ persistido por espécimen y por sesión.
 ## Análisis de tiempo por nivel, motor y tablero
 
 **Lo que este análisis SÍ y NO afirma:**
-- **No** dice "el motor X tarda Z minutos en llegar a N4". Hasta la fecha **ningún espécimen ha
-  superado N1** (el mejor: N1 con 5.608 generaciones en 15×15), así que cualquier tiempo-a-N2..N5
-  sería *declarado*, no medido. No se inventa.
+- **No** dice "el motor X tarda Z minutos en llegar a N4". El nivel **típico** de todos los
+  especímenes medidos es N0; N1 y N2 solo aparecen en partidas sueltas (el récord N2 es de
+  `basic-tablerop` en 8×8). Cualquier tiempo-a-N2..N5 sería *declarado*, no medido. No se inventa.
 - **Sí** da las piezas reales para estimarlo uno mismo tras entrenar, separando lo determinista
   (mate), lo medido (coste/generación) y lo empírico (a medir).
 
@@ -178,12 +205,13 @@ pendiente de mayor retorno: multiplicar gen/min sube el techo de nivel alcanzabl
 
 Observado hasta hoy (único dato real):
 - **N0:** inmediato (generación 1). Longitud 3 ya es <10% en cualquier tablero.
-- **N1:** alcanzado por `PRUEBA-UNO` en 15×15 en algún punto de sus 5.608 gen (no se registró la
-  generación exacta del cruce). En 8×8 debería costar mucho menos (N1 son 4 frutas allí, no 20).
-- **N2..N5:** **no observado** en ningún motor ni tablero. Sin dato no hay número.
+- **N1:** récord de una partida de `PRUEBA-UNO` en 15×15 en algún punto de sus 5.608 gen (no se
+  registró la generación exacta). Su nivel **típico** sigue siendo N0 (92 % de sus partidas).
+- **N2:** solo como récord de una partida (`basic-tablerop`, 8×8; 2 % de sus partidas).
+- **N3..N5:** **no observado** en ningún motor ni tablero. Sin dato no hay número.
 
 **Receta para obtenerlo de verdad** (y luego rellenar esto como MEDIDO):
-1. Entrenar registrando por generación la cobertura del mejor (el evento `gen` ya trae `cobertura` y `nivel`).
+1. Entrenar con semilla y registrar por generación el récord validado (`val_record` en el evento `gen`); al final, el nivel típico de `eval`.
 2. Anotar la primera generación en que sube el nivel (N0→N1, N1→N2, …).
 3. `tiempo_a_Nk = esa_generacion × (ms/gen del bloque B para ese motor+tablero)`.
 4. Repetir varias corridas (la evolución tiene azar) y reportar mediana + rango.

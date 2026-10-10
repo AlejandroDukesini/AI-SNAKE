@@ -10,7 +10,7 @@
    ============================================================================ */
 
 import { useCallback, useEffect, useState } from 'react';
-import { api } from './lib/api';
+import { api, DEMO } from './lib/api';
 import { openPreferences } from './lib/consent';
 import PlayView from './views/PlayView';
 import AIManagerView from './views/AIManagerView';
@@ -100,6 +100,18 @@ export default function App() {
   return (
     <div className="min-h-full px-5 py-8 md:px-8">
       <div className="max-w-6xl mx-auto">
+        {DEMO && (
+          <div role="note"
+               className="mb-6 px-4 py-3 rounded-2xl border border-accent bg-surface
+                          text-sm text-center text-ink leading-relaxed">
+            <span className="inline-block mr-2 px-2 py-0.5 rounded-md bg-accent text-on-accent
+                             text-xs font-semibold tracking-wider">BORRADOR</span>
+            Versión de demostración sin servidor: la IA se simula en tu navegador y
+            siempre muestra lo mismo. Los cambios no se guardan al recargar. Para la
+            neuroevolución real, clona el repositorio y ejecuta{' '}
+            <code className="text-accent">npm run dev</code>.
+          </div>
+        )}
         <header className="mb-8 text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Snake IA</h1>
           <p className="text-sm text-muted mt-1">

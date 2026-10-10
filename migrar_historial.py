@@ -63,9 +63,15 @@ def migrar(dry=False):
 
         # `fecha` era el unico campo temporal del formato antiguo.
         fecha = viejo.get("fecha_creacion") or viejo.get("fecha") or ""
-        # La red antigua tiene 9 entradas; from_dict le anade la columna de
-        # ceros del sensor de tamano, dejando su comportamiento intacto.
-        brain = ml.NeuralNetwork.from_dict(viejo["pesos"])
+        # La red antigua tiene 9 entradas; from_dict coloca cada peso en la
+        # posicion de su mismo sensor en el vector de 26 (misma decision que la
+        # red original, verificado en benchmarks/audit_ia.py, bloque C).
+        try:
+            brain = ml.NeuralNetwork.from_dict(viejo["pesos"])
+        except ml.ModelError as exc:
+            print(f"  [error]    {nombre:24s} no se puede convertir sin cambiar su comportamiento: {exc}")
+            saltadas += 1
+            continue
 
         modelo = {
             "carpeta":             carpeta,

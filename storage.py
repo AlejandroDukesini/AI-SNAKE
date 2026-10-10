@@ -151,11 +151,36 @@ def model_summary(m):
             resumen["cobertura"]      = info["cobertura"]
             resumen["nivel"]          = info["nivel"]
             resumen["nivel_etiqueta"] = info["etiqueta"]
+
+    # Nivel TIPICO: el de la cobertura mediana en las partidas de prueba de los
+    # pesos guardados. Solo existe para especimenes evaluados con `eval`.
+    ev = m.get("eval")
+    if isinstance(ev, dict) and isinstance(ev.get("cobertura_mediana"), (int, float)):
+        tip = ml.nivel_de_cobertura(float(ev["cobertura_mediana"]))
+        resumen["nivel_tipico"] = tip["nivel"]
+        resumen["nivel_tipico_etiqueta"] = tip["etiqueta"]
+
+    # Arquitectura REAL de los pesos (el sello `advanced` es ambiguo en los
+    # modelos antiguos). Si no se pueden cargar, se dice por que.
+    try:
+        resumen["engine"] = ml.brain_from_dict(m.get("pesos")).NAME
+    except ml.ModelError as exc:
+        resumen["modelo_error"] = str(exc)
     return resumen
 
 
+def _orden(m):
+    """Clave de orden del historial: primero los que tienen evaluacion validada,
+    por cobertura media (comparable entre tableros); despues los antiguos sin
+    evaluar, por su record de fitness de un episodio."""
+    ev = m.get("eval")
+    if isinstance(ev, dict) and isinstance(ev.get("cobertura_media"), (int, float)):
+        return (1, float(ev["cobertura_media"]))
+    return (0, float(m.get("fitness", 0) or 0))
+
+
 def list_models():
-    """Todos los especimenes guardados, ordenados por fitness (mejor primero)."""
+    """Todos los especimenes guardados (ver `_orden`)."""
     _ensure_history_dir()
     modelos = []
     for carpeta in sorted(os.listdir(HISTORY_DIR)):
@@ -167,7 +192,7 @@ def list_models():
         resumen = model_summary(m)
         resumen["sesiones"] = load_sessions(carpeta)
         modelos.append(resumen)
-    modelos.sort(key=lambda m: m.get("fitness", 0), reverse=True)
+    modelos.sort(key=_orden, reverse=True)
     return modelos
 
 
@@ -177,18 +202,28 @@ def list_models():
 def save_training(nombre, resultado):
     """Guarda el resultado de un entrenamiento en la carpeta del especimen.
 
-    Si la carpeta ya existe se CONTINUA el linaje: las generaciones se acumulan
-    y el mejor linaje (pesos) solo se sustituye si esta tanda supero el record.
-    La evolucion tiene azar, asi que una tanda peor no debe degradar al mejor
-    especimen que el usuario ya tenia: seguir entrenando nunca empeora tu IA.
+    Se guardan por separado (ver `snake_neuroevolution.train`):
+      - `fitness`/`frutas`/`pasos`/`length`/`grid`: RECORD DE UN EPISODIO, la
+        mejor partida individual observada jamas en el linaje. Maximo historico.
+      - `pesos`: el cerebro. Al continuar un linaje solo se sustituye si el
+        entrenamiento demostro una mejora en las semillas de VALIDACION frente al
+        heredado (`mejora_validada`), no porque una partida suelta saliera mejor.
+      - `eval`: rendimiento HABITUAL de los pesos guardados (media, mediana,
+        dispersion, IC 95 %) en semillas de prueba fijas.
+
+    Conservar el mejor validado evita sustituir el cerebro por uno con suerte,
+    pero no garantiza que el rendimiento real mejore entrenamiento a
+    entrenamiento: eso lo dice `eval`.
 
     Devuelve el resumen del modelo guardado (sin pesos).
     """
     carpeta = slugify(nombre)
     previo = load_model(carpeta)
     ahora = _now()
+    evaluacion = resultado.get("eval")
 
     if previo is None:
+        actualizar_pesos = True
         modelo = {
             "carpeta":             carpeta,
             "nombre":              str(nombre or carpeta).strip()[:40] or carpeta,
@@ -205,15 +240,28 @@ def save_training(nombre, resultado):
         }
     else:
         modelo = previo
-        modelo["generaciones"] = int(modelo.get("generaciones", 0)) + int(resultado["generaciones"])
+        # El historico puede no tener generaciones (modelos importados: None).
+        modelo["generaciones"] = int(modelo.get("generaciones") or 0) + int(resultado["generaciones"])
         modelo["fecha_actualizacion"] = ahora
-        if int(resultado["fitness"]) > int(modelo.get("fitness", -1)):
+        if int(resultado["fitness"]) > int(modelo.get("fitness", 0) or 0):
             modelo["fitness"] = int(resultado["fitness"])
             modelo["frutas"]  = int(resultado["frutas"])
             modelo["pasos"]   = int(resultado["pasos"])
             modelo["length"]  = int(resultado["length"])
             modelo["grid"]    = int(resultado["grid"])
-            modelo["pesos"]   = resultado["brain"].to_dict()
+        # Sin la marca (resultado de una version anterior de `train`) se aplica el
+        # criterio antiguo: el record de un episodio.
+        actualizar_pesos = bool(resultado.get(
+            "mejora_validada", int(resultado["fitness"]) >= int(modelo.get("fitness", 0) or 0)))
+        if actualizar_pesos:
+            modelo["pesos"] = resultado["brain"].to_dict()
+
+    # `eval` describe SIEMPRE los pesos que quedan guardados: si no se sustituyen,
+    # `train` devolvio el propio cerebro heredado y la evaluacion es la suya.
+    if isinstance(evaluacion, dict):
+        modelo["eval"] = evaluacion
+        if resultado.get("validacion"):
+            modelo["validacion"] = resultado["validacion"]
 
     # Nivel de inteligencia PERSISTENTE y MONOTONO: se guarda la mejor cobertura
     # que la IA haya alcanzado JAMAS (no la de la ultima tanda). Asi el nivel de
@@ -252,7 +300,13 @@ def save_training(nombre, resultado):
         "cobertura":      info_sesion["cobertura"],
         "nivel":          info_sesion["nivel"],
         "nivel_etiqueta": info_sesion["etiqueta"],
+        # `record`: esta tanda iguala o bate el record de UN episodio del linaje.
         "record":         int(resultado["fitness"]) >= int(modelo["fitness"]),
+        "pesos_actualizados": actualizar_pesos,
+        "eval":           evaluacion if isinstance(evaluacion, dict) else None,
+        "semilla":        resultado.get("seed"),
+        "engine":         resultado.get("engine"),
+        "detenido":       bool(resultado.get("detenido", False)),
     })
     _write_json(os.path.join(model_dir(carpeta), SESSIONS_FILE), sesiones)
 

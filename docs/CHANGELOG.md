@@ -5,6 +5,43 @@ como **ADR** (Architecture Decision Record) para dejar constancia del *por qué*
 
 ---
 
+## ADR-003 — Protocolo de evaluación con semillas fijas y carga explícita de modelos
+
+**Estado:** aceptado · **Ámbito:** `snake_neuroevolution.py`, `storage.py`, `ai_server.py`, vistas
+de entrenamiento e historial. Evidencia en [`auditoria-cientifica-ia.md`](auditoria-cientifica-ia.md).
+
+### Contexto
+La auditoría confirmó que (1) cada individuo se juzgaba por **una** partida aleatoria, así que el
+"récord" era el máximo de miles de episodios ruidosos (2–7× la media real) y decidía qué pesos se
+guardaban; (2) los especímenes `advanced` guardados con la arquitectura anterior (26 → 32 → 16 → 3)
+se sustituían en silencio por una red aleatoria; (3) una parada a mitad de generación contaba esa
+generación; (4) el récord arrancaba en −1 aunque el fitness puede ser negativo; (5) el estado
+recurrente podía desbordar a NaN y `argmax(NaN)` elegía "recto" sin avisar.
+
+### Decisión
+- **Selección:** 3 partidas con semillas comunes por individuo y generación (élite incluida).
+- **Validación:** el campeón de cada generación juega 10 semillas fijas; se devuelve el mejor
+  validado (al continuar un linaje, el heredado compite en las mismas semillas).
+- **Prueba:** el cerebro devuelto juega 20 semillas fijas que no deciden nada → `eval` (media,
+  mediana, sd, IC 95 %, nivel típico). El récord de una partida se conserva aparte.
+- **Pesos guardados:** solo cambian con `mejora_validada`.
+- **Carga:** `advanced_v1` carga los pesos antiguos con su `forward` original; cualquier modelo
+  incompatible o con NaN lanza `ModelError`. Nada se sustituye por una red aleatoria.
+- **Numérica:** estado recurrente acotado a 10⁶; sigmoide sin desbordamiento; salida no finita →
+  partida inválida (fitness −∞), excluida de élite y estadísticas.
+- **Reproducibilidad:** `train(seed=…)` con generadores propios; la semilla se guarda por sesión.
+- **Fitness:** se conserva el original. La variante simétrica (sin premio por paso) se probó y no
+  rindió mejor.
+
+### Consecuencias
+- Cada generación cuesta ~3× más partidas (~5× más tiempo medido en 8×8 a 20 generaciones).
+- El rendimiento mostrado describe el comportamiento habitual del modelo, no su mejor partida.
+- A **igual cómputo** no aprende mejor que el algoritmo anterior (diferencias no significativas en
+  los tres motores); da resultados más consistentes entre entrenamientos. Ninguna configuración
+  alcanza a la regla voraz de referencia.
+
+---
+
 ## ADR-002 — Motor `advanced`: de red profunda a una sola capa oculta (26 → 16 → 3)
 
 **Estado:** aceptado · **Ámbito:** `snake_neuroevolution.py` (`AdvancedNetwork`), UI de motores.

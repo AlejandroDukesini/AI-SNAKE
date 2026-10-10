@@ -10,7 +10,8 @@ import { useCallback, useState } from 'react';
 import Board from '../components/Board';
 import { api } from '../lib/api';
 import { useSocket } from '../lib/useSocket';
-import { Title, Hint, Button, IconButton, Empty, Modal, Stat, LevelBadge } from '../components/ui';
+import { Title, Hint, Button, IconButton, Empty, Modal, Stat, LevelBadge, textoRendimiento }
+  from '../components/ui';
 import { RenameModelModal, DeleteModelModal } from '../components/ModelDialogs';
 
 /* Los especimenes importados del formato antiguo no registraron sus
@@ -20,10 +21,13 @@ function generacionesTexto(g) {
   return `${g} ${g === 1 ? 'generación' : 'generaciones'}`;
 }
 
-/* Mini-grafica del historico de scores, en SVG puro: son cuatro lineas y no
-   merece la pena arrastrar una libreria de graficos para esto. */
+/* Mini-grafica del historico, en SVG puro. Si las sesiones tienen evaluacion
+   validada se dibuja la media de frutas por partida de cada una; si no (sesiones
+   antiguas), el record de fitness de una partida, que es lo unico que guardaban. */
 function Sparkline({ sesiones }) {
-  const puntos = sesiones.map((s) => s.fitness);
+  const evaluadas = sesiones.filter((s) => typeof s.eval?.frutas_media === 'number');
+  const usarEval = evaluadas.length >= 2;
+  const puntos = usarEval ? evaluadas.map((s) => s.eval.frutas_media) : sesiones.map((s) => s.fitness);
   if (puntos.length < 2) return null;
 
   const max = Math.max(...puntos);
@@ -39,7 +43,8 @@ function Sparkline({ sesiones }) {
     .join(' ');
 
   return (
-    <svg width={w} height={h} className="shrink-0" aria-label="Evolución del score">
+    <svg width={w} height={h} className="shrink-0"
+         aria-label={usarEval ? 'Evolución de la media validada de frutas' : 'Evolución del récord de una partida'}>
       <path d={d} fill="none" stroke="var(--accent)" strokeWidth="1.5"
             strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -65,13 +70,22 @@ function ModelRow({ m, index, onProbar, onFavorito, onRenombrar, onBorrar }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <span className="font-medium text-ink truncate">{m.nombre}</span>
-          <LevelBadge nivel={m.nivel} etiqueta={m.nivel_etiqueta} className="shrink-0" />
+          {m.nivel_tipico != null
+            ? <LevelBadge nivel={m.nivel_tipico} etiqueta={`Nivel típico (mediana de las partidas de prueba): ${m.nivel_tipico_etiqueta}`} className="shrink-0" />
+            : <LevelBadge nivel={m.nivel} etiqueta={`Nivel de su mejor partida (sin evaluación validada): ${m.nivel_etiqueta}`} className="shrink-0" />}
+        </div>
+        <div className="text-xs text-ink mt-0.5">
+          {m.modelo_error
+            ? <span className="text-danger">No se puede cargar: {m.modelo_error}</span>
+            : textoRendimiento(m.eval)
+              ? <>Rendimiento validado: {textoRendimiento(m.eval)}</>
+              : <span className="text-muted">Sin evaluación validada (entrenada con una versión anterior)</span>}
         </div>
         <div className="text-xs text-muted mt-0.5">
           historial/{m.carpeta}/ · {generacionesTexto(m.generaciones)} ·
           {' '}tamaño {m.length} · tablero {m.grid}×{m.grid}
           {m.engine && <> · motor {m.engine}</>}
-          {m.cobertura != null && <> · cobertura {(m.cobertura * 100).toFixed(1)}%</>}
+          {m.cobertura != null && <> · mejor partida: cobertura {(m.cobertura * 100).toFixed(1)}%</>}
         </div>
         <div className="text-xs text-muted">
           {m.sesiones?.length ?? 0} entrenamiento{(m.sesiones?.length ?? 0) === 1 ? '' : 's'}
@@ -81,8 +95,9 @@ function ModelRow({ m, index, onProbar, onFavorito, onRenombrar, onBorrar }) {
 
       <Sparkline sesiones={m.sesiones ?? []} />
 
-      <span className="text-lg font-semibold text-accent tabular-nums" title="Récord de fitness">
-        {m.fitness}
+      <span className="text-right" title="Récord de fitness: la mejor partida individual observada en el entrenamiento, no el rendimiento habitual">
+        <span className="block text-lg font-semibold text-accent tabular-nums">{m.fitness}</span>
+        <span className="block text-[10px] text-muted">récord 1 partida</span>
       </span>
 
       <div className="flex gap-2">
@@ -105,8 +120,10 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
   const [soloFavoritos, setSoloFavoritos] = useState(false);
   const [renombrar, setRenombrar] = useState(null);   // Especimen que se renombra
 
+  const [demoError, setDemoError] = useState(null);
   const onDemo = useCallback((msg) => {
     if (msg.type === 'state') setDemoSnake(msg.snake);
+    else if (msg.type === 'error') setDemoError(msg.detail);
   }, []);
 
   // El hook cierra el socket solo al cerrar la ventana (probando -> null).
@@ -158,7 +175,7 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
         <div className="space-y-3">
           {visibles.map((m, i) => (
             <ModelRow key={m.carpeta} m={m} index={i}
-                      onProbar={(x) => { setDemoSnake(null); setProbando(x); }}
+                      onProbar={(x) => { setDemoSnake(null); setDemoError(null); setProbando(x); }}
                       onFavorito={favorito} onRenombrar={setRenombrar}
                       onBorrar={setBorrar} />
           ))}
@@ -169,9 +186,13 @@ export default function HistoryView({ theme, grid, models, onChanged }) {
       <Modal open={!!probando} onClose={() => setProbando(null)}
              title={`Probando: ${probando?.nombre ?? ''}`}>
         <Hint className="mb-4">
-          Récord {probando?.fitness} · {generacionesTexto(probando?.generaciones)} ·
-          {' '}entrenada en {probando?.grid}×{probando?.grid}, jugando en {grid}×{grid}
+          {textoRendimiento(probando?.eval)
+            ? <>Rendimiento validado: {textoRendimiento(probando?.eval)} · </>
+            : 'Sin evaluación validada · '}
+          récord de 1 partida {probando?.fitness} · {generacionesTexto(probando?.generaciones)} ·
+          {' '}récord en {probando?.grid}×{probando?.grid}, jugando en {grid}×{grid}
         </Hint>
+        {demoError && <Hint className="mb-4 text-danger">Error: {demoError}</Hint>}
         <Board snake={demoSnake} grid={grid} theme={theme} />
         <div className="grid grid-cols-2 gap-3 my-4">
           <Stat label="Tamaño ahora" value={demoSnake?.length ?? '—'} accent />

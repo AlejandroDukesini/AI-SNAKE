@@ -66,7 +66,11 @@ function FilaIA({ m, indice, total, turno, bloqueada, onAlternar, onMover,
           <LevelBadge nivel={m.nivel} etiqueta={m.nivel_etiqueta} className="shrink-0" />
         </div>
         <div className="text-xs text-muted truncate">
-          {m.generaciones ?? '?'} gen · récord {m.fitness} · tablero {m.grid}×{m.grid}
+          {m.generaciones ?? '?'} gen
+          {typeof m.eval?.frutas_media === 'number'
+            ? <> · media {m.eval.frutas_media} frutas/partida ({m.eval.grid}×{m.eval.grid})</>
+            : <> · sin evaluar</>}
+          {' '}· récord 1 partida {m.fitness}
         </div>
       </div>
 

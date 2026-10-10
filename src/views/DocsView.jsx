@@ -378,12 +378,12 @@ function ModuloCerebro() {
             <Hint className="mb-3">
               La capa oculta se realimenta a sí misma: en cada turno ve las entradas del
               momento <span className="text-ink">y su propio estado del turno anterior</span>.
-              Eso le da memoria dentro de una partida —recordar por dónde venía—, el
-              ingrediente de la planificación emergente.
+              Eso le da memoria dentro de una partida. Que la use para planificar no está
+              medido: no hay ninguna métrica que lo demuestre.
             </Hint>
-            <Code caption="Nace a cero: se comporta como una feedforward y la mutación va introduciendo la memoria, así que añadirla no degrada nada de lo aprendido.">
+            <Code caption="Nace a cero: al principio decide igual que una feedforward y la mutación va introduciendo la memoria. El estado se acota a 10⁶ para que no desborde a inf/NaN.">
 {`# estado oculto que persiste entre pasos
-h = tanh(W1 @ x + W_rec @ h_prev + b1)
+h = relu(W1 @ x + W_rec @ h_prev + b1)
 salida = W2 @ h + b2      # recto | izq | der`}
             </Code>
           </Card>
@@ -393,8 +393,8 @@ salida = W2 @ h + b2      # recto | izq | der`}
               El motor <span className="text-ink">{m.label}</span> es feedforward puro: cada
               decisión depende solo de lo que ve en ese turno, sin arrastrar estado del
               anterior. Gana simplicidad y velocidad de mutación; renuncia a la memoria
-              intra-partida. Para planificación que dependa de "por dónde venía", el motor{' '}
-              <span className="text-ink">RNN Recurrente</span> es el indicado.
+              intra-partida (la tiene el motor <span className="text-ink">intermated</span>).
+              Qué motor aprende mejor no está demostrado.
             </Hint>
           </Card>
         )}
@@ -408,33 +408,41 @@ salida = W2 @ h + b2      # recto | izq | der`}
    =========================================================================== */
 
 const NIVELES = [
-  { n: 'N0', nombre: 'Supervivencia refleja', cob: '< 10 %', tono: 'mute' },
-  { n: 'N1', nombre: 'Forrajeo básico',       cob: '10–20 %', tono: 'mute' },
-  { n: 'N2', nombre: 'Forrajeo fiable',       cob: '20–35 %', tono: 'ok' },
-  { n: 'N3', nombre: 'Conciencia espacial',   cob: '35–55 %', tono: 'ok' },
-  { n: 'N4', nombre: 'Planificación emergente', cob: '55–80 %', tono: 'info' },
-  { n: 'N5', nombre: 'Casi óptimo',           cob: '> 80 %', tono: 'warn' },
+  { n: 'N0', nombre: 'Nivel típico de todos los especímenes medidos', cob: '< 10 %', tono: 'ok' },
+  { n: 'N1', nombre: 'Solo en partidas sueltas',                    cob: '10–20 %', tono: 'mute' },
+  { n: 'N2', nombre: 'Solo en partidas sueltas (8×8)',              cob: '20–35 %', tono: 'mute' },
+  { n: 'N3', nombre: 'No observado',                                cob: '35–55 %', tono: 'mute' },
+  { n: 'N4', nombre: 'No observado',                                cob: '55–80 %', tono: 'mute' },
+  { n: 'N5', nombre: 'No observado',                                cob: '≥ 80 %', tono: 'mute' },
 ];
 
 const OPERADORES = [
-  { t: 'Elitismo', d: 'Las 3 mejores redes pasan intactas a la siguiente generación. El buen material nunca se pierde.' },
-  { t: 'Selección por torneo (k=3)', d: 'Se cogen 3 al azar y gana el de mayor fitness. Presiona hacia lo bueno sin descartar del todo la diversidad.' },
+  { t: 'Elitismo', d: 'Las 3 mejores redes pasan intactas (mismos pesos y mismo historial de evaluación) a la siguiente generación.' },
+  { t: 'Selección por torneo (k=3)', d: 'Se cogen 3 al azar y gana el de mayor fitness medio en las 3 partidas comunes de la generación.' },
   { t: 'Cruce uniforme', d: 'El hijo hereda cada peso de uno u otro padre. Recombina soluciones parciales de dos linajes.' },
-  { t: 'Mutación gaussiana adaptativa', d: 'Un 5 % de los pesos se perturba. Si la población se estanca, la intensidad baja sola (recocido): pasa de explorar a afinar.' },
+  { t: 'Mutación gaussiana adaptativa', d: 'Un 5 % de los pesos se perturba (σ = 0,20). Si el récord validado no mejora en 4 generaciones, σ se multiplica por 0,85 (suelo 0,05).' },
 ];
 
 function ModuloGenetico() {
   return (
     <div className="space-y-5">
-      <Card title="Aprende sin gradiente ni datos supervisados" badge={<Badge tono="ok">✅ funciona</Badge>}>
+      <Card title="Aprende sin gradiente ni datos supervisados" badge={<Badge tono="info">medido</Badge>}>
         <Hint>
           No hay <em>backpropagation</em> ni dataset. Se evoluciona una población de 25
           serpientes: la Generación 2 se entrena <span className="text-ink">literalmente
           sobre los mejores hijos de la 1</span>. Los pesos aleatorios del inicio se
-          convierten en comportamiento por pura selección natural.
+          convierten en comportamiento por pura selección natural. Medido: aprende muy por
+          encima del azar, pero <span className="text-ink">sigue por debajo de una regla voraz
+          sin aprendizaje</span> (acercarse a la manzana evitando la muerte inmediata). Cifras en
+          <code className="text-ink"> docs/auditoria-cientifica-ia.md</code>.
         </Hint>
-        <Code caption="Fitness = recompensa densa. Crecer vale mil veces más que sobrevivir; el shaping orienta a las que aún no han comido.">
-{`fitness = pasos + (tamaño − 3) × 1000 + shaping_de_acercamiento`}
+        <Code caption="Crecer vale mil veces más que sobrevivir. Limitación medida: dar vueltas sin comer suma +0,5 por paso (la alternativa simétrica se probó y no rindió mejor).">
+{`fitness = pasos + (tamaño − 3) × 1000 + shaping_de_acercamiento   # +3 acercarse, −4 alejarse`}
+        </Code>
+        <Code caption="Cada individuo juega 3 partidas con semillas comunes; el campeón se valida en 10 semillas fijas y el cerebro guardado se evalúa en 20 semillas de prueba que no deciden nada.">
+{`seleccion  = media(fitness en 3 semillas de la generacion)
+validacion = media(fitness en 10 semillas fijas)     # decide el cerebro devuelto
+eval       = frutas en 20 semillas de prueba          # lo que se muestra`}
         </Code>
       </Card>
 
@@ -455,11 +463,12 @@ function ModuloGenetico() {
         </div>
       </Card>
 
-      <Card title="La métrica objetiva: Cobertura" badge={<Badge tono="info">medida, no declarada</Badge>}>
+      <Card title="Niveles por cobertura" badge={<Badge tono="info">métrica de resultado</Badge>}>
         <Hint className="mb-3">
-          La inteligencia se mide con una sola regla independiente del tamaño de tablero,
-          así que compara 8×8, 10×10 y 15×15 de forma justa. El nivel <span className="text-ink">solo
-          puede subir</span> entrenamiento a entrenamiento (récord monótono).
+          La cobertura es la fracción del tablero que ocupa el cuerpo. Cada espécimen muestra
+          su nivel <span className="text-ink">típico</span> (mediana de 20 partidas de prueba) y,
+          aparte, el de su mejor partida (histórico, monótono). Las etiquetas describen solo la
+          cobertura, no capacidades.
         </Hint>
         <Code>{`cobertura = longitud / (grid × grid)      # fracción del tablero ocupada`}</Code>
 
@@ -563,7 +572,7 @@ if ultimo["step"] is not None:
           <Stat label="CLS" value="0,016" />
         </div>
         <Hint className="mt-3 text-xs">
-          El flood-fill que da la inteligencia espacial es el punto más caliente y el más
+          El flood-fill del sensor de espacio libre es el punto más caliente y el más
           difícil de vectorizar: por eso el siguiente salto (evaluación por lotes en NumPy)
           es un rediseño del simulador, no un cambio de una línea.
         </Hint>
@@ -597,11 +606,12 @@ function ModuloSeguridad() {
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Cero pérdida de progreso" badge={<Badge tono="ok">récord monótono</Badge>}>
+        <Card title="Cero pérdida de progreso" badge={<Badge tono="ok">mejora validada</Badge>}>
           <ul className="space-y-2 text-sm text-muted leading-relaxed">
             <li>▸ Cada IA es una <span className="text-ink">carpeta</span>: <code className="text-ink">modelo.json</code> (mejor linaje) + <code className="text-ink">sesiones.json</code> (histórico).</li>
-            <li>▸ Reentrenar acumula generaciones, pero los pesos <span className="text-ink">solo se sustituyen si se batió el récord</span>. La evolución tiene azar: una mala racha nunca degrada tu IA.</li>
-            <li>▸ <code className="text-ink">record_cobertura</code> es monótono: el nivel solo sube o se mantiene.</li>
+            <li>▸ Reentrenar acumula generaciones, pero los pesos <span className="text-ink">solo se sustituyen si un candidato supera al heredado en las semillas de validación</span>. Evita cambiar el cerebro por uno con suerte; no garantiza que el rendimiento suba.</li>
+            <li>▸ <code className="text-ink">record_cobertura</code> (nivel de la mejor partida) es monótono; el nivel típico sale de la evaluación.</li>
+            <li>▸ Un modelo que no se puede cargar se rechaza con un error explícito: nunca se cambia por una red aleatoria.</li>
           </ul>
         </Card>
 
@@ -669,9 +679,9 @@ export default function DocsView() {
         Fuentes: <code className="text-ink">snake_neuroevolution.py</code> ·{' '}
         <code className="text-ink">ai_server.py</code> ·{' '}
         <code className="text-ink">storage.py</code>. Detalle completo en{' '}
-        <code className="text-ink">TECHNICAL_PROOF.md</code>,{' '}
-        <code className="text-ink">ENGINES.md</code> y{' '}
-        <code className="text-ink">PLANNING.md</code>.
+        <code className="text-ink">docs/ARCHITECTURE.md</code>,{' '}
+        <code className="text-ink">docs/ENGINES.md</code> y{' '}
+        <code className="text-ink">docs/ROADMAP.md</code>.
       </p>
     </div>
   );

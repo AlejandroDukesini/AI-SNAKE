@@ -14,14 +14,21 @@
    VITE_BACKEND_URL con la URL del backend de Render y se antepone a cada ruta.
    ============================================================================ */
 
+import { demoFetch, demoSocket } from './demo/server';
+
 /* Base de las peticiones HTTP.
    - Con VITE_BACKEND_URL definida: esa URL, sin la barra final (evita el //
      duplicado al concatenar con rutas que empiezan por /).
    - Sin definir: cadena vacia => rutas relativas, comportamiento local/monolitico. */
 const API_BASE = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
 
+/* MODO BORRADOR (VITE_DEMO=true): para hostings estaticos como Netlify, donde
+   el servidor de Python no existe. Las peticiones y los sockets los responde un
+   backend simulado en el propio navegador (ver lib/demo/server.js). */
+export const DEMO = import.meta.env.VITE_DEMO === 'true';
+
 async function req(url, options) {
-  const res = await fetch(API_BASE + url, options);
+  const res = DEMO ? await demoFetch(url, options) : await fetch(API_BASE + url, options);
   if (!res.ok) {
     // El detalle lo pone FastAPI; si la respuesta no es JSON, no reventar aqui.
     const detalle = await res.json().catch(() => ({}));
@@ -81,4 +88,10 @@ export function wsURL(path) {
   }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${proto}//${location.host}${path}`;
+}
+
+/* Abre un WebSocket hacia `path`. En modo borrador devuelve un socket simulado
+   con la misma interfaz (onopen/onmessage/onclose, send, close, readyState). */
+export function openSocket(path) {
+  return DEMO ? demoSocket(path) : new WebSocket(wsURL(path));
 }

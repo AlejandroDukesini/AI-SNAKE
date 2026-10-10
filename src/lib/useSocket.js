@@ -17,7 +17,7 @@
    ============================================================================ */
 
 import { useEffect, useRef, useCallback } from 'react';
-import { wsURL } from './api';
+import { openSocket } from './api';
 
 export function useSocket(path, onMessage, { enabled = true } = {}) {
   const socketRef = useRef(null);
@@ -29,7 +29,7 @@ export function useSocket(path, onMessage, { enabled = true } = {}) {
   useEffect(() => {
     if (!enabled || !path) return undefined;
 
-    const ws = new WebSocket(wsURL(path));
+    const ws = openSocket(path);
     socketRef.current = ws;
     let vivo = true;
 
@@ -46,14 +46,14 @@ export function useSocket(path, onMessage, { enabled = true } = {}) {
       vivo = false;
       socketRef.current = null;
       // readyState CONNECTING no admite close() limpio: se espera a open.
-      if (ws.readyState === WebSocket.OPEN) ws.close();
+      if (ws.readyState === 1) ws.close();   // 1 = OPEN
       else ws.addEventListener('open', () => ws.close());
     };
   }, [path, enabled]);
 
   const send = useCallback((data) => {
     const ws = socketRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
+    if (ws && ws.readyState === 1) {     // 1 = OPEN
       ws.send(JSON.stringify(data));
       return true;
     }

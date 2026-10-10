@@ -24,6 +24,7 @@
 
 import os
 import queue
+import random
 import asyncio
 import threading
 
@@ -120,6 +121,9 @@ def get_config():
         # Motores de red disponibles + el de por defecto. La UI construye su
         # selector con esto, sin duplicar la lista de arquitecturas en React.
         "engines":        [{"id": k, **v} for k, v in ml.ENGINE_INFO.items()],
+        # Arquitecturas antiguas que solo se pueden CARGAR (no elegir): la UI las
+        # usa para rotular especimenes guardados con ellas.
+        "legacy_engines": [{"id": k, **v} for k, v in ml.LEGACY_INFO.items()],
         "default_engine": ml.DEFAULT_ENGINE,
         "limits": {
             "min_generations": ml.MIN_GENERATIONS,
@@ -243,7 +247,7 @@ async def ws_train(ws: WebSocket):
 
     Acciones que acepta del cliente:
       {'action':'cancel'}   descartar: corta en el acto y NO guarda nada.
-      {'action':'stop'}     detener: cierra la generacion en curso y SI guarda.
+      {'action':'stop'}     detener: descarta la generacion a medias y guarda las completas.
       {'action':'pause'}    congelar entre agentes.
       {'action':'resume'}   reanudar.
     """
@@ -274,11 +278,25 @@ async def ws_train(ws: WebSocket):
     engine      = ml.clamp_engine(peticion.get("engine", ml.DEFAULT_ENGINE))
     nombre      = peticion.get("nombre") or ml.random_name()
     carpeta     = storage.slugify(nombre)
+    # Semilla del entrenamiento: la del cliente si la manda (para reproducir una
+    # sesion), o una nueva. Se guarda en la sesion.
+    try:
+        semilla = int(peticion["seed"])
+    except (KeyError, TypeError, ValueError):
+        semilla = random.SystemRandom().randrange(2 ** 31)
 
     # Si la carpeta ya existe se HEREDA su linaje; si no, nace de cero. El
-    # dispatcher elige el motor correcto por el sello guardado en el JSON.
+    # dispatcher elige el motor correcto por el sello y las formas del JSON. Un
+    # modelo que no se puede cargar NO se sustituye por una red nueva: se avisa
+    # y no se entrena (entrenar lo sobrescribiria).
     previo = storage.load_model(carpeta)
-    seed_brain = ml.brain_from_dict(previo["pesos"]) if previo else None
+    try:
+        seed_brain = ml.brain_from_dict(previo["pesos"]) if previo else None
+    except ml.ModelError as exc:
+        await ws.send_json({"type": "error",
+                            "detail": f"No se puede continuar '{nombre}': {exc}"})
+        await ws.close()
+        return
     # Motor efectivo: continuar un linaje conserva SU arquitectura; solo un
     # especimen nuevo estrena el motor pedido en la interfaz.
     engine_efectivo = seed_brain.NAME if seed_brain is not None else engine
@@ -297,6 +315,8 @@ async def ws_train(ws: WebSocket):
         "agents":   agentes,
         "elite":    elite,
         "engine":   engine_efectivo,
+        "seed":     semilla,
+        "episodios_por_agente": ml.EVAL_EPISODES,
     })
 
     def on_event(tipo, datos):
@@ -331,7 +351,7 @@ async def ws_train(ws: WebSocket):
                                  on_event=on_event, elite=elite,
                                  infinite=infinito, engine=engine,
                                  stop_check=parar.is_set,
-                                 pause_check=esta_pausado)
+                                 pause_check=esta_pausado, seed=semilla)
             if resultado is None:
                 return          # Descartado: no se guarda nada
             resumen = storage.save_training(nombre, resultado)
@@ -501,7 +521,12 @@ async def ws_demo(ws: WebSocket, carpeta: str):
         return
 
     grid = ml.clamp_grid(storage.load_config()["grid"])
-    brain = ml.brain_from_dict(modelo["pesos"])
+    try:
+        brain = ml.brain_from_dict(modelo["pesos"])
+    except ml.ModelError as exc:
+        await ws.send_json({"type": "error", "detail": f"No se puede cargar el especimen: {exc}"})
+        await ws.close()
+        return
     snake = ml.Snake(brain=brain.clone(), grid=grid)
 
     try:
@@ -510,6 +535,11 @@ async def ws_demo(ws: WebSocket, carpeta: str):
             await asyncio.sleep(1.0 / FPS_PLAY)
             if snake.alive:
                 snake.step_ai()
+                if snake.invalid:
+                    await ws.send_json({"type": "error", "detail":
+                                        "La red produjo un valor no finito (inf/NaN): "
+                                        "el especimen no puede seguir jugando."})
+                    return
             else:
                 await asyncio.sleep(0.7)                       # Pausa breve
                 snake = ml.Snake(brain=brain.clone(), grid=grid)  # Reinicia
