@@ -1,0 +1,9 @@
+[project]
+name = "arkis-ai-lab"
+version = "0.1.0"
+description = "ARKIS AI LAB: cinco metodologías de aprendizaje compitiendo en Snake"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
