@@ -3,19 +3,20 @@ import { useEffect, useState } from 'react';
 import { DIFICULTADES, api, fmt, pct } from '../../lib/api';
 import { useDatos } from '../../lib/hooks';
 import Grafica, { mediaMovil } from '../../components/Grafica';
+import { Distribucion } from '../../components/Distribucion';
 import { Aviso, Boton, Campo, Dato, Nota, Numero, Panel, Plegable, Selector } from '../../components/ui';
 
 const PARAMS = {
-  alfa: ['α (tasa de aprendizaje)', 0.01], gamma: ['γ (descuento)', 0.01],
-  epsilon_inicial: ['ε inicial', 0.05], epsilon_final: ['ε final', 0.01], decaimiento: ['Decaimiento de ε por episodio', 0.001],
+  alfa: ['α (aprendizaje)', 0.01], gamma: ['γ (descuento)', 0.01],
+  epsilon_inicial: ['ε inicial', 0.05], epsilon_final: ['ε final', 0.01], decaimiento: ['Decaimiento ε', 0.001],
 };
 
-export default function PanelBork({ m, recargar, lanzar, ocupado }) {
+export default function PanelBork({ m, recargar, lanzar, ocupado, visor }) {
   const e = m.entrenamiento;
   const [cfg, setCfg] = useState(e.config);
   const [error, setError] = useState(null);
   const [dif, setDif] = useState('medio');
-  const [episodios, setEpisodios] = useState(500);
+  const [episodios, setEpisodios] = useState(300);
   const [semilla, setSemilla] = useState(0);
   const [velocidad, setVelocidad] = useState('');
   const [tabla, recargarTabla] = useDatos('/api/bork/tabla?limite=30', [m.version]);
@@ -26,50 +27,49 @@ export default function PanelBork({ m, recargar, lanzar, ocupado }) {
     try { await api.post('/api/bork/config', cfg); recargar(); } catch (err) { setError(err.message); }
   };
   const curva = e.curva || [];
-  const meta = (m.versiones || []).length;
+
+  const controles = (
+    <>
+      <Panel titulo="Entrenar por episodios">
+        <div className="grid grid-cols-2 gap-2">
+          <Campo etiqueta="Dificultad"><Selector valor={dif} cambiar={setDif} opciones={DIFICULTADES} /></Campo>
+          <Campo etiqueta="Episodios"><Numero valor={episodios} cambiar={setEpisodios} min={1} max={100000} /></Campo>
+          <Campo etiqueta="Semilla"><Numero valor={semilla} cambiar={setSemilla} min={0} /></Campo>
+          <Campo etiqueta="Velocidad del juego (mov/s)" ayuda="Define cuántos pasos son 30 s de juego (regla de ciclos)"><Numero valor={velocidad} cambiar={setVelocidad} min={1} /></Campo>
+        </div>
+        <Boton className="mt-3" variante="primario" disabled={ocupado} onClick={() => lanzar('entrenar', { dificultad: dif, episodios, semilla, velocidad: velocidad || null, guardar_cada: 0 })}>Iniciar entrenamiento</Boton>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Dato etiqueta="Episodios totales" valor={fmt(e.episodios_totales, 0)} />
+          <Dato etiqueta="ε actual" valor={fmt(e.epsilon_actual, 3)} />
+          <Dato etiqueta="Estados visitados" valor={fmt(e.estados, 0)} />
+          <Dato etiqueta="Cobertura de la tabla" valor={pct(e.estados / e.estados_posibles, 2)} />
+        </div>
+      </Panel>
+      <Panel titulo="Configuración del Q-Learning">
+        <div className="text-xs font-mono mb-2">Q(s,a) ← Q(s,a) + α [ r + γ · max Q(s′,a′) − Q(s,a) ]</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {Object.entries(PARAMS).map(([k, [et, paso]]) => <Campo key={k} etiqueta={et}><Numero valor={cfg[k]} paso={paso} cambiar={(v) => setCfg({ ...cfg, [k]: v })} /></Campo>)}
+          <Campo etiqueta="Estado"><Selector valor={cfg.representacion} cambiar={(v) => setCfg({ ...cfg, representacion: v })} opciones={{ completa: 'Completo (36 864)', basica: 'Básico (144)' }} /></Campo>
+        </div>
+        <div className="mt-2"><Plegable titulo="Recompensas y penalizaciones">
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(cfg.recompensa).map(([k, v]) => (
+              <Campo key={k} etiqueta={k.replaceAll('_', ' ')}><Numero valor={v} paso={0.01} cambiar={(x) => setCfg({ ...cfg, recompensa: { ...cfg.recompensa, [k]: x } })} /></Campo>
+            ))}
+          </div>
+        </Plegable></div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Boton onClick={guardar}>Guardar configuración</Boton>
+          <Boton variante="peligro" disabled={ocupado} onClick={async () => { await api.post('/api/bork/reiniciar'); recargar(); }} title="Empieza una tabla vacía; las versiones anteriores se conservan">Reiniciar tabla</Boton>
+        </div>
+        <Aviso error={error} />
+      </Panel>
+    </>
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel titulo="Configuración del Q-Learning">
-          <div className="text-xs font-mono mb-2">Q(s,a) ← Q(s,a) + α [ r + γ · max Q(s′,a′) − Q(s,a) ]</div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {Object.entries(PARAMS).map(([k, [et, paso]]) => <Campo key={k} etiqueta={et}><Numero valor={cfg[k]} paso={paso} cambiar={(v) => setCfg({ ...cfg, [k]: v })} /></Campo>)}
-            <Campo etiqueta="Estado"><Selector valor={cfg.representacion} cambiar={(v) => setCfg({ ...cfg, representacion: v })} opciones={{ completa: 'Completo (36 864)', basica: 'Básico (144, ablación)' }} /></Campo>
-          </div>
-          <Plegable titulo="Recompensas y penalizaciones">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {Object.entries(cfg.recompensa).map(([k, v]) => (
-                <Campo key={k} etiqueta={k.replaceAll('_', ' ')}><Numero valor={v} paso={0.01} cambiar={(x) => setCfg({ ...cfg, recompensa: { ...cfg.recompensa, [k]: x } })} /></Campo>
-              ))}
-            </div>
-          </Plegable>
-          <div className="mt-3 flex gap-2">
-            <Boton onClick={guardar}>Guardar configuración</Boton>
-            <Boton variante="peligro" disabled={ocupado} onClick={async () => { await api.post('/api/bork/reiniciar'); recargar(); }} title="Empieza una tabla vacía; las versiones anteriores se conservan">Reiniciar tabla</Boton>
-          </div>
-          <Aviso error={error} />
-        </Panel>
-
-        <Panel titulo="Entrenar por episodios">
-          <div className="grid grid-cols-2 gap-2">
-            <Campo etiqueta="Dificultad"><Selector valor={dif} cambiar={setDif} opciones={DIFICULTADES} /></Campo>
-            <Campo etiqueta="Episodios"><Numero valor={episodios} cambiar={setEpisodios} min={1} max={100000} /></Campo>
-            <Campo etiqueta="Semilla"><Numero valor={semilla} cambiar={setSemilla} min={0} /></Campo>
-            <Campo etiqueta="Velocidad del juego (mov/s)" ayuda="Solo cambia la duración del límite de ciclo en pasos; el entrenamiento corre sin dibujar"><Numero valor={velocidad} cambiar={setVelocidad} min={1} /></Campo>
-          </div>
-          <Boton className="mt-3" variante="primario" disabled={ocupado} onClick={() => lanzar('entrenar', { dificultad: dif, episodios, semilla, velocidad: velocidad || null, guardar_cada: 0 })}>Entrenar</Boton>
-          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <Dato etiqueta="Episodios totales" valor={fmt(e.episodios_totales, 0)} />
-            <Dato etiqueta="ε actual" valor={fmt(e.epsilon_actual, 3)} />
-            <Dato etiqueta="Estados visitados" valor={fmt(e.estados, 0)} />
-            <Dato etiqueta="Cobertura de la tabla" valor={pct(e.estados / e.estados_posibles, 2)} />
-          </div>
-          <Nota className="mt-2">Versiones guardadas: {meta}. Cada sesión de entrenamiento crea una versión nueva.</Nota>
-        </Panel>
-      </div>
-
-      <Panel titulo="Curva de aprendizaje">
+    <Distribucion visor={visor} controles={controles}>
+      <Panel titulo="Curva de aprendizaje (todas las sesiones)">
         {curva.length > 1 ? (
           <div className="grid gap-4 lg:grid-cols-2">
             <Grafica series={[
@@ -84,7 +84,6 @@ export default function PanelBork({ m, recargar, lanzar, ocupado }) {
         ) : <Nota>Entrena para ver la curva.</Nota>}
         <Nota className="mt-2">El retorno es propio de BORK y de su función de recompensa: no se compara con otros modelos (para eso está la pestaña Comparación, con métricas de juego).</Nota>
       </Panel>
-
       <Panel titulo="Tabla Q: estados más visitados" accion={<Boton onClick={recargarTabla}>Actualizar</Boton>}>
         <Nota>Formato del estado: peligro|encierro|cola por acción (↑↓←→) | signo de Δx y Δy de la manzana.</Nota>
         <div className="max-h-80 overflow-auto mt-2">
@@ -94,6 +93,6 @@ export default function PanelBork({ m, recargar, lanzar, ocupado }) {
             ))}</tbody></table>
         </div>
       </Panel>
-    </div>
+    </Distribucion>
   );
 }

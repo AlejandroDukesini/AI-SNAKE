@@ -6,16 +6,16 @@ import random
 import numpy as np
 import pytest
 
-from arkis_lab.evaluacion.lineas_base import politica_azar, politica_voraz
-from arkis_lab.evaluacion.protocolo import estadistico, evaluar, semillas
-from arkis_lab.modelos.arkis.caracteristicas import NOMBRES, caracteristicas
-from arkis_lab.modelos.arkis.clasificador import ErrorEntrenamiento, entrenar
-from arkis_lab.modelos.ejemplos import Dataset, ErrorDataset
-from arkis_lab.modelos.arkis.servicio import ServicioArkis
-from arkis_lab.modelos.situacion import (SIMETRIAS, percepcion_de, situacion_de,
+from ia_snake.evaluacion.lineas_base import politica_azar, politica_voraz
+from ia_snake.evaluacion.protocolo import estadistico, evaluar, semillas
+from ia_snake.modelos.arkis.caracteristicas import NOMBRES, caracteristicas
+from ia_snake.modelos.arkis.clasificador import ErrorEntrenamiento, entrenar
+from ia_snake.modelos.ejemplos import Dataset, ErrorDataset
+from ia_snake.modelos.arkis.servicio import ServicioArkis
+from ia_snake.modelos.situacion import (SIMETRIAS, percepcion_de, situacion_de,
                                          transformar_accion, transformar_situacion)
-from arkis_lab.nucleo.entorno import Entorno
-from arkis_lab.nucleo.motor import ACCIONES, Partida
+from ia_snake.nucleo.entorno import Entorno
+from ia_snake.nucleo.motor import ACCIONES, Partida
 
 
 def ejemplos_del_profesor(n_episodios, dificultad="medio", base=0):
@@ -54,7 +54,7 @@ def test_simetrias_son_exactas(sim):
 
 @pytest.mark.parametrize("sim", list(SIMETRIAS))
 def test_simetria_sobre_el_vector_igual_a_recalcular(sim):
-    from arkis_lab.modelos.arkis.caracteristicas import transformar_caracteristicas
+    from ia_snake.modelos.arkis.caracteristicas import transformar_caracteristicas
     rng = random.Random(4)
     for semilla in range(5):
         ent = Entorno("medio")
@@ -110,7 +110,7 @@ def test_arkis_aprende_de_los_ejemplos():
     ds = ejemplos_del_profesor(25)
     res = entrenar(ds.aprobados(), semilla=0, aumentar=True, n_arboles=60)
     assert res.metricas["validacion"]["accuracy"] > 0.8
-    from arkis_lab.modelos.arkis.clasificador import ArkisAgente
+    from ia_snake.modelos.arkis.clasificador import ArkisAgente
     ag = ArkisAgente(res.modelo)
     s = semillas("validacion", 20)
     arkis = evaluar(ag.politica(), "medio", s).manzanas

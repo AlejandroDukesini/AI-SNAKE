@@ -2,12 +2,12 @@ import random
 
 import pytest
 
-from arkis_lab.evaluacion.lineas_base import politica_azar
-from arkis_lab.evaluacion.protocolo import evaluar, semillas
-from arkis_lab.modelos.bork.qlearning import ConfigBork, TablaQ, estado
-from arkis_lab.modelos.bork.servicio import ServicioBork
-from arkis_lab.nucleo.motor import Accion, Partida
-from arkis_lab.nucleo.percepcion import percibir
+from ia_snake.evaluacion.lineas_base import politica_azar
+from ia_snake.evaluacion.protocolo import evaluar, semillas
+from ia_snake.modelos.bork.qlearning import ConfigBork, TablaQ, estado
+from ia_snake.modelos.bork.servicio import ServicioBork
+from ia_snake.nucleo.motor import Accion, Partida
+from ia_snake.nucleo.percepcion import percibir
 
 A, B, I, D = Accion.ARRIBA, Accion.ABAJO, Accion.IZQUIERDA, Accion.DERECHA
 

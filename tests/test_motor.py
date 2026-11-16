@@ -2,8 +2,8 @@ import random
 
 import pytest
 
-from arkis_lab.nucleo.config import DIFICULTADES
-from arkis_lab.nucleo.motor import (ACCIONES, CUERPO, LIMITE, Accion, ErrorPartida,
+from ia_snake.nucleo.config import DIFICULTADES
+from ia_snake.nucleo.motor import (ACCIONES, CUERPO, LIMITE, Accion, ErrorPartida,
                                     EstadoPartida, Partida)
 
 A, B, I, D = Accion.ARRIBA, Accion.ABAJO, Accion.IZQUIERDA, Accion.DERECHA

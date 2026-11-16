@@ -120,6 +120,8 @@ body {
 
 /* Tablas densas del laboratorio */
 .tabla { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+.tabla-envoltura, section:has(> .tabla) { overflow-x: auto; }
+@media (max-width: 640px) { .tabla th { white-space: normal; } }
 .tabla th { text-align: left; font-weight: 500; color: var(--muted); padding: .4rem .5rem;
   border-bottom: 1px solid var(--line); white-space: nowrap; }
 .tabla td { padding: .4rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }

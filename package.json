@@ -1,12 +1,12 @@
 {
-  "name": "arkis-ai-lab",
+  "name": "ia-snake",
   "private": true,
   "version": "3.0.0",
   "type": "module",
-  "description": "ARKIS AI LAB: cinco metodologias de aprendizaje (ML, simbolico, refuerzo e hibridos) resolviendo Snake. React + Vite; los modelos corren en Python.",
+  "description": "IA-SNAKE: cinco metodologias de aprendizaje (ML, simbolico, refuerzo e hibridos) resolviendo Snake. React + Vite; los modelos corren en Python.",
   "scripts": {
     "dev": "vite",
-    "dev:backend": "python -m uvicorn arkis_lab.servidor.app:app --reload --port 8000",
+    "dev:backend": "python -m uvicorn ia_snake.servidor.app:app --reload --port 8000",
     "dev:all": "python run.py",
     "build": "node scripts/build.mjs",
     "build:frontend": "node scripts/build.mjs --solo=frontend",

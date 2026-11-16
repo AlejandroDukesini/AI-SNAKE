@@ -4,7 +4,7 @@ import { ESTADOS } from '../lib/api';
 
 export function Panel({ children, className = '', titulo, accion }) {
   return (
-    <section className={`bg-surface border border-line rounded-panel p-5 ${className}`}>
+    <section className={`min-w-0 bg-surface border border-line rounded-panel p-4 sm:p-5 ${className}`}>
       {(titulo || accion) && (
         <div className="flex items-center justify-between gap-3 mb-3">
           {titulo && <h2 className="text-base font-semibold tracking-tight">{titulo}</h2>}
@@ -79,7 +79,7 @@ export function Interruptor({ valor, cambiar, etiqueta }) {
 
 export function Segmentado({ opciones, valor, cambiar }) {
   return (
-    <div className="inline-flex flex-wrap bg-surface2 border border-line rounded-lg p-0.5">
+    <div className="inline-flex flex-wrap max-w-full bg-surface2 border border-line rounded-lg p-0.5">
       {Object.entries(opciones).map(([k, v]) => (
         <button key={k} onClick={() => cambiar(k)}
           className={`px-3 py-1 text-sm rounded-md transition ${valor === k ? 'bg-accent text-on-accent' : 'text-muted hover:text-ink'}`}>
@@ -96,6 +96,7 @@ export function Insignia({ children, tono = 'normal', title }) {
     acento: 'border-accent text-accent bg-accent/10',
     peligro: 'border-danger text-danger bg-danger/10',
     ok: 'border-snake text-snake bg-snake/10',
+    aviso: 'border-food/60 text-food bg-food/10',
   };
   return <span title={title} className={`inline-flex items-center px-2 py-0.5 rounded-md border text-xs font-medium ${tonos[tono]}`}>{children}</span>;
 }

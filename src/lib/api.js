@@ -10,7 +10,7 @@
 
 export const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 const TIEMPO_MAXIMO_MS = 30_000;
-const CLAVE_TOKEN = 'arkis:token';
+const CLAVE_TOKEN = 'ia-snake:token';
 
 export function leerToken() {
   try { return localStorage.getItem(CLAVE_TOKEN) || ''; } catch { return ''; }
@@ -24,7 +24,7 @@ async function pedir(metodo, ruta, cuerpo, tiempo = TIEMPO_MAXIMO_MS) {
   const headers = {};
   if (cuerpo !== undefined) headers['Content-Type'] = 'application/json';
   const token = leerToken();
-  if (token) headers['X-Arkis-Token'] = token;
+  if (token) headers['X-IA-Snake-Token'] = token;
   const control = new AbortController();
   const temporizador = setTimeout(() => control.abort(), tiempo);
   let r;

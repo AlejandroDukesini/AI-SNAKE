@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from arkis_lab.nucleo.entorno import ResumenEpisodio
-from arkis_lab.persistencia.almacen import AlmacenModelo, ErrorAlmacen
+from ia_snake.nucleo.entorno import ResumenEpisodio
+from ia_snake.persistencia.almacen import AlmacenModelo, ErrorAlmacen
 
 
 def resumen(nivel, manzanas, dif="medio"):

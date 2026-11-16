@@ -1,11 +1,11 @@
-ARKIS AI LAB - CAMBIOS REALIZADOS E INSTRUCCIONES DE EJECUCION
+IA-SNAKE - CAMBIOS REALIZADOS E INSTRUCCIONES DE EJECUCION
 ================================================================
 Fecha: 2026-11-16 · Version 3.0.0 · Motor 1.0.0
 
 1. QUE CAMBIO
 -------------
 El proyecto dejo de ser "Snake IA - Neuroevolucion" (algoritmo genetico sobre redes
-neuronales) y paso a ser ARKIS AI LAB: un laboratorio donde cinco modelos resuelven el mismo
+neuronales) y paso a ser IA-SNAKE: un laboratorio donde cinco modelos resuelven el mismo
 Snake con metodologias distintas. La neuroevolucion no correspondia a ninguna de ellas y su
 motor estaba acoplado al modelo, asi que se reconstruyo desde cero.
 
@@ -24,7 +24,7 @@ Principal (produccion) NO se ha tocado: pasa de Beta a Principal tras tus prueba
 
 3. QUE SE CONSTRUYO
 -------------------
-  Etapa 2 · Motor (arkis_lab/nucleo/)
+  Etapa 2 · Motor (ia_snake/nucleo/)
     - Tableros 4x4 (longitud inicial 1), 8x8 y 16x16 (longitud 3). El dificil es 16x16 (D0).
     - Tres sentidos: cuerpo (matriz + segmentos sincronizados), manzana, muros.
     - Recompensa configurable con 8 componentes registrados por separado.
@@ -40,7 +40,7 @@ Principal (produccion) NO se ha tocado: pasa de Beta a Principal tras tus prueba
     - Hibrido con tres componentes propios (RF + reglas + tabla Q), integracion documentada
       (vetos -> conocimiento del usuario -> pesos). Empieza sin entrenar (D4).
   Etapa 6 (parcial) · Laboratorio
-    - Servidor FastAPI (arkis_lab/servidor/) e interfaz React: Panel, Simulador (observar,
+    - Servidor FastAPI (ia_snake/servidor/) e interfaz React: Panel, Simulador (observar,
       demostrar, jugar, corregir), Entrenamiento (un panel por modelo), Evolucion,
       Comparacion y Documentacion.
     - Persistencia por modelo: versiones inmutables con SHA-256, recuperacion ante errores,
@@ -61,19 +61,19 @@ Principal (produccion) NO se ha tocado: pasa de Beta a Principal tras tus prueba
   npm run build
   npm start          -> produccion: un solo proceso sirve web y API en :8000
 
-  python -m pytest                     -> 112 pruebas
+  python -m pytest                     -> 118 pruebas
   python scripts/lineas_base.py        -> azar y voraz en las tres dificultades
   python scripts/medir_modelos.py      -> entrena cada modelo desde cero y lo evalua
 
   Tus modelos se guardan en laboratorio/<modelo>/ (no se sube a git).
-  Para usar otra carpeta:  ARKIS_LAB_DATOS=/ruta npm run dev:all
+  Para usar otra carpeta:  IA_SNAKE_DATOS=/ruta npm run dev:all
 
 5. LIMITACIONES CONOCIDAS
 -------------------------
   - La interfaz compila y el servidor se probo de extremo a extremo con peticiones reales,
     pero la interfaz no se reviso visualmente en un navegador: queda para tus pruebas.
   - Los modelos superan claramente al azar; frente a la regla voraz los resultados varian
-    por modelo (ver docs/arkis/RESULTADOS.md). En 8x8 solo LERK alcanzo E8 (2 de 50
+    por modelo (ver docs/ia-snake/RESULTADOS.md). En 8x8 solo LERK alcanzo E8 (2 de 50
     partidas); 16x16 no se ha medido con entrenamiento completo.
   - Las cifras de RESULTADOS.md vienen de un solo entrenamiento por modelo (semilla 0).
   - El rendimiento de ARKIS depende de tus etiquetas; la cifra de RESULTADOS.md usa un
@@ -84,16 +84,22 @@ Principal (produccion) NO se ha tocado: pasa de Beta a Principal tras tus prueba
 6. DOCUMENTACION
 ----------------
   README.md                         resumen y uso
-  docs/arkis/ETAPA-1-ANALISIS.md    analisis y propuesta inicial
-  docs/arkis/DECISIONES.md          decisiones aprobadas y notas de diseno
-  docs/arkis/ETAPA-2-MOTOR.md       evidencia del motor y lineas base
-  docs/arkis/ARQUITECTURA.md        documentacion tecnica
-  docs/arkis/MANUAL-USUARIO.md      manual de participacion del usuario
-  docs/arkis/RESULTADOS.md          cifras medidas y como reproducirlas
+  docs/ia-snake/ETAPA-1-ANALISIS.md    analisis y propuesta inicial
+  docs/ia-snake/DECISIONES.md          decisiones aprobadas y notas de diseno
+  docs/ia-snake/ETAPA-2-MOTOR.md       evidencia del motor y lineas base
+  docs/ia-snake/ARQUITECTURA.md        documentacion tecnica
+  docs/ia-snake/MANUAL-USUARIO.md      manual de participacion del usuario
+  docs/ia-snake/RESULTADOS.md          cifras medidas y como reproducirlas
 
 7. DESPLIEGUE (rama despliegue)
 -------------------------------
   Netlify y Vercel publican el frontend; el backend Python corre en un contenedor con
-  disco persistente (Dockerfile, render.yaml). Clave de escritura ARKIS_TOKEN, CORS por
+  disco persistente (Dockerfile, render.yaml). Clave de escritura IA_SNAKE_TOKEN, CORS por
   dominios, build centralizado con validaciones (npm run build). Todo el detalle, las
   pruebas y lo que queda pendiente: DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt
+
+8. CORRECCIONES FUNCIONALES Y VISUALES (rama correcciones)
+---------------------------------------------------------
+  Entrenamiento visible en vivo y con datos reales, distribución equilibrada de los paneles,
+  etiquetado guiado de ARKIS y el nombre del proyecto corregido a IA-SNAKE. Detalle:
+  CORRECCIONES_IA_SNAKE.txt

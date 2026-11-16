@@ -4,16 +4,16 @@ import numpy as np
 import pytest
 from sklearn.ensemble import RandomForestClassifier
 
-from arkis_lab.evaluacion.lineas_base import politica_azar
-from arkis_lab.evaluacion.protocolo import evaluar, semillas
-from arkis_lab.modelos.bork.qlearning import TablaQ, estado
-from arkis_lab.modelos.bosque_rapido import BosqueRapido
-from arkis_lab.modelos.clark.hibrido import ClarkAgente, Componentes, ConfigClark
-from arkis_lab.modelos.clark.servicio import ServicioClark
-from arkis_lab.modelos.lerk.conocimiento import BaseConocimiento, Regla
-from arkis_lab.modelos.situacion import situacion_de
-from arkis_lab.nucleo.motor import Accion, Partida
-from arkis_lab.nucleo.percepcion import percibir
+from ia_snake.evaluacion.lineas_base import politica_azar
+from ia_snake.evaluacion.protocolo import evaluar, semillas
+from ia_snake.modelos.bork.qlearning import TablaQ, estado
+from ia_snake.modelos.bosque_rapido import BosqueRapido
+from ia_snake.modelos.clark.hibrido import ClarkAgente, Componentes, ConfigClark
+from ia_snake.modelos.clark.servicio import ServicioClark
+from ia_snake.modelos.lerk.conocimiento import BaseConocimiento, Regla
+from ia_snake.modelos.situacion import situacion_de
+from ia_snake.nucleo.motor import Accion, Partida
+from ia_snake.nucleo.percepcion import percibir
 
 A, B, I, D = Accion.ARRIBA, Accion.ABAJO, Accion.IZQUIERDA, Accion.DERECHA
 
@@ -103,8 +103,8 @@ def test_clark_empieza_sin_entrenar_y_aprende(tmp_path):
 
 
 def test_clark_no_comparte_nada_con_lerk_ni_bork(tmp_path):
-    from arkis_lab.modelos.bork.servicio import ServicioBork
-    from arkis_lab.modelos.lerk.servicio import ServicioLerk
+    from ia_snake.modelos.bork.servicio import ServicioBork
+    from ia_snake.modelos.lerk.servicio import ServicioLerk
     lerk, bork, clark = ServicioLerk(tmp_path), ServicioBork(tmp_path), ServicioClark(tmp_path)
     lerk.crear_regla({"condiciones": ["libre"], "conclusion": "preferir"})
     bork.entrenar("facil", episodios=3)

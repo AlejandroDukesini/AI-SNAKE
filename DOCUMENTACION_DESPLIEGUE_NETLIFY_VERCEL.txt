@@ -1,4 +1,4 @@
-ARKIS AI LAB - DOCUMENTACION DE DESPLIEGUE EN NETLIFY Y VERCEL
+IA-SNAKE - DOCUMENTACION DE DESPLIEGUE EN NETLIFY Y VERCEL
 ==============================================================
 Fecha: 2026-11-16 · Rama: despliegue -> Beta
 
@@ -24,7 +24,7 @@ ESTADO DE VERIFICACION (sin adornos)
 --------------------------
   - Frontend: React 18 + Vite 6 + Tailwind 4. Salida en dist/. Todas las llamadas pasan
     por src/lib/api.js con rutas relativas /api/... Sin URLs fijas en componentes.
-  - Backend: Python 3.10+ (probado con 3.13), FastAPI. Entrada: arkis_lab/servidor/app.py
+  - Backend: Python 3.10+ (probado con 3.13), FastAPI. Entrada: ia_snake/servidor/app.py
     (instancia `app`). 43 rutas /api (GET, POST, PATCH, DELETE).
   - Estado del backend:
       * sesiones de juego en memoria del proceso,
@@ -57,10 +57,10 @@ ESTADO DE VERIFICACION (sin adornos)
          |  https://<sitio>.netlify.app   o   https://<sitio>.vercel.app
          v
    [Netlify / Vercel]  -- solo archivos estaticos de dist/ (SPA)
-         |  fetch(VITE_API_URL + "/api/...")   cabecera X-Arkis-Token si hay clave
+         |  fetch(VITE_API_URL + "/api/...")   cabecera X-IA-Snake-Token si hay clave
          v
    [Contenedor Docker: uvicorn + FastAPI]  https://<backend>  (p. ej. Render)
-         |  APP_ENV=produccion · ARKIS_TOKEN · CORS_ORIGINS · ARKIS_LAB_DATOS=/datos
+         |  APP_ENV=produccion · IA_SNAKE_TOKEN · CORS_ORIGINS · IA_SNAKE_DATOS=/datos
          v
    [Disco persistente /datos]  laboratorio de cada modelo (versiones, SQLite)
 
@@ -75,22 +75,22 @@ ESTADO DE VERIFICACION (sin adornos)
     de conexion, respuestas no JSON, 401 y errores del servidor (sin detalles internos).
   - La clave de escritura NO va en el build: si el backend la exige (/api/salud ->
     requiere_clave), la interfaz muestra un campo «Clave del laboratorio»; se guarda solo en
-    el navegador del usuario (localStorage) y se envia como cabecera X-Arkis-Token.
+    el navegador del usuario (localStorage) y se envia como cabecera X-IA-Snake-Token.
   - SPA: Netlify ([[redirects]] /* -> /index.html 200) y Vercel (rewrite a /index.html);
     los archivos reales tienen prioridad.
 
 5. BACKEND
 ----------
-  - arkis_lab/servidor/ajustes.py: lee y VALIDA el entorno al arrancar. En produccion, sin
-    ARKIS_TOKEN (>= 16 caracteres) el proceso no arranca; CORS sin comodines y solo https.
+  - ia_snake/servidor/ajustes.py: lee y VALIDA el entorno al arrancar. En produccion, sin
+    IA_SNAKE_TOKEN (>= 16 caracteres) el proceso no arranca; CORS sin comodines y solo https.
   - Middleware: con clave definida, POST/PATCH/PUT/DELETE y la exportacion exigen
-    X-Arkis-Token (comparacion en tiempo constante). Lectura libre.
+    X-IA-Snake-Token (comparacion en tiempo constante). Lectura libre.
   - CORS: solo los origenes de CORS_ORIGINS, sin credenciales; cabeceras Content-Type y
-    X-Arkis-Token; es el middleware mas externo (los 401 tambien llevan CORS).
+    X-IA-Snake-Token; es el middleware mas externo (los 401 tambien llevan CORS).
   - Errores no previstos: 500 generico en produccion (detalle solo en el log).
   - /docs y /openapi.json desactivados en produccion. /api/... inexistente -> 404 JSON.
   - Importacion limitada a ~50 MB y base64 validado.
-  - arkis_lab/servidor/verificar.py: verificacion real de arranque (dependencias,
+  - ia_snake/servidor/verificar.py: verificacion real de arranque (dependencias,
     configuracion, importacion de la app y peticiones de prueba).
   - Un solo proceso (--workers 1) y una sola instancia: el estado es local.
 
@@ -120,14 +120,14 @@ ESTADO DE VERIFICACION (sin adornos)
   .env.example                         plantilla de variables
   .gitattributes                       *.sh y Dockerfile siempre con LF
   scripts/build.mjs                    build centralizado con validaciones
-  arkis_lab/servidor/ajustes.py        configuracion validada por entorno
-  arkis_lab/servidor/verificar.py      verificacion de arranque del backend
+  ia_snake/servidor/ajustes.py        configuracion validada por entorno
+  ia_snake/servidor/verificar.py      verificacion de arranque del backend
   tests/test_seguridad.py              pruebas de clave, CORS y configuracion
   DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt   este archivo
 
 9. ARCHIVOS MODIFICADOS
 -----------------------
-  arkis_lab/servidor/app.py   CORS, clave de escritura, errores, /docs, 404 de API, limite
+  ia_snake/servidor/app.py   CORS, clave de escritura, errores, /docs, 404 de API, limite
   src/lib/api.js              URL base, timeouts, clave, errores de red / no JSON
   src/App.jsx                 campo de clave y mensaje de conexion segun el entorno
   src/views/*.jsx             timeouts largos en operaciones sincronas lentas
@@ -136,7 +136,7 @@ ESTADO DE VERIFICACION (sin adornos)
   package-lock.json           ahora versionado (npm ci reproducible)
   .gitignore                  .env, .vercel, .netlify; deja de ignorar package-lock.json
   run.py                      usa `npm run dev` (Vite) en desarrollo
-  README.md, CAMBIOS.txt, docs/arkis/MANUAL-USUARIO.md   comandos actualizados
+  README.md, CAMBIOS.txt, docs/ia-snake/MANUAL-USUARIO.md   comandos actualizados
 
 10. DEPENDENCIAS AGREGADAS
 --------------------------
@@ -151,10 +151,10 @@ ESTADO DE VERIFICACION (sin adornos)
                    VITE_* con TOKEN/SECRET/KEY/PASS/CLAVE en el nombre.
   Backend (servicio del contenedor):
     APP_ENV         produccion (el Dockerfile ya la fija)
-    ARKIS_TOKEN     secreto, >= 16 caracteres. Generar:
+    IA_SNAKE_TOKEN     secreto, >= 16 caracteres. Generar:
                     python -c "import secrets; print(secrets.token_urlsafe(32))"
     CORS_ORIGINS    https://<sitio>.netlify.app,https://<sitio>.vercel.app
-    ARKIS_LAB_DATOS /datos (ruta del disco persistente)
+    IA_SNAKE_DATOS /datos (ruta del disco persistente)
     PORT            8000 (o el que inyecte el host)
   Donde se configuran:
     Netlify: Site configuration > Environment variables (scope Builds).
@@ -190,11 +190,11 @@ ESTADO DE VERIFICACION (sin adornos)
   Con Render (ejemplo; cualquier host de contenedores con disco sirve):
    1. https://dashboard.render.com > New > Blueprint > conecta el repositorio.
       Render lee render.yaml (rama Principal; cambiala a Beta si quieres probar antes).
-   2. Introduce ARKIS_TOKEN (genera uno nuevo) y CORS_ORIGINS (puedes dejar un valor
+   2. Introduce IA_SNAKE_TOKEN (genera uno nuevo) y CORS_ORIGINS (puedes dejar un valor
       provisional y corregirlo cuando tengas los dominios de Netlify/Vercel).
    3. Crea el servicio. Plan con disco (starter): el gratuito no tiene disco persistente.
    4. Comprueba https://<backend>.onrender.com/api/salud -> {"ok":true,...,"requiere_clave":true}
-  Otro host: docker build -t arkis-ai-lab . y ejecutar con un volumen en /datos y las
+  Otro host: docker build -t ia-snake . y ejecutar con un volumen en /datos y las
   variables del punto 11.
 
 15. PROCEDIMIENTO - NETLIFY
@@ -227,7 +227,7 @@ ESTADO DE VERIFICACION (sin adornos)
 18. API
 -------
   Prefijo /api en todas las rutas. Lectura (GET) publica; escritura y exportacion con la
-  cabecera X-Arkis-Token. Salud: GET /api/salud. La interfaz usa solo src/lib/api.js.
+  cabecera X-IA-Snake-Token. Salud: GET /api/salud. La interfaz usa solo src/lib/api.js.
 
 19. LIMITACIONES
 ----------------
@@ -244,7 +244,7 @@ ESTADO DE VERIFICACION (sin adornos)
 
 20. PERSISTENCIA
 ----------------
-  Todo lo que debe durar esta en ARKIS_LAB_DATOS (/datos en el contenedor): versiones de
+  Todo lo que debe durar esta en IA_SNAKE_DATOS (/datos en el contenedor): versiones de
   cada modelo (con hash), ejemplos y casos (JSON con copia .bak) y SQLite de episodios,
   sesiones y records. En Render, el disco montado en /datos sobrevive a reinicios y
   despliegues. Sin disco, los datos se perderian: por eso no se recomienda el plan
@@ -259,9 +259,9 @@ ESTADO DE VERIFICACION (sin adornos)
   - npm run build (local): ✓ (frontend + verificacion completa del backend).
   - npm run build:backend: ✓.
   - build:netlify / build:vercel rechazan: sin VITE_API_URL, http, localhost, URL con
-    ruta y VITE_SECRET_KEY. Con https://arkis-api.ejemplo.dev: ✓ y la URL queda en el JS.
+    ruta y VITE_SECRET_KEY. Con https://ia-snake-api.ejemplo.dev: ✓ y la URL queda en el JS.
   - Backend real en produccion (uvicorn, puerto local):
-      sin ARKIS_TOKEN -> no arranca (ErrorConfiguracion)
+      sin IA_SNAKE_TOKEN -> no arranca (ErrorConfiguracion)
       GET /api/salud 200 · GET /api/modelos 200
       POST sin clave 401 · POST con clave 200 · PATCH/DELETE con errores -> 400 JSON
       preflight desde el origen autorizado -> allow-origin correcto; origen ajeno -> sin CORS

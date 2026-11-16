@@ -1,13 +1,13 @@
-# ARKIS AI LAB — backend Python (y, opcionalmente, la web) en un solo contenedor.
+# IA-SNAKE — backend Python (y, opcionalmente, la web) en un solo contenedor.
 #
 # Es el servicio que EJECUTA Python en producción: Netlify no tiene runtime de Python y el
 # backend (sesiones en memoria, entrenamientos en segundo plano, persistencia en disco) no
 # encaja en funciones serverless. Funciona en cualquier host de contenedores con disco
 # persistente (Render, Railway, Fly.io, un VPS...). Ver DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt.
 #
-#   docker build -t arkis-ai-lab .
-#   docker run -p 8000:8000 -v arkis-datos:/datos \
-#     -e ARKIS_TOKEN=... -e CORS_ORIGINS=https://tu-sitio.netlify.app arkis-ai-lab
+#   docker build -t ia-snake .
+#   docker run -p 8000:8000 -v ia-snake-datos:/datos \
+#     -e IA_SNAKE_TOKEN=... -e CORS_ORIGINS=https://tu-sitio.netlify.app ia-snake
 
 # --- Etapa 1: web compilada (rutas relativas: este mismo contenedor también la sirve) ---
 FROM node:20-slim AS web
@@ -24,17 +24,17 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_ENV=produccion \
-    ARKIS_LAB_DATOS=/datos \
+    IA_SNAKE_DATOS=/datos \
     PORT=8000
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY arkis_lab ./arkis_lab
+COPY ia_snake ./ia_snake
 COPY --from=web /app/dist ./dist
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-    && useradd --system --uid 10001 --create-home arkis \
-    && mkdir -p /datos && chown arkis:arkis /datos
+    && useradd --system --uid 10001 --create-home iasnake \
+    && mkdir -p /datos && chown iasnake:iasnake /datos
 VOLUME /datos
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \

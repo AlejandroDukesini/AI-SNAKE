@@ -20,15 +20,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from arkis_lab.evaluacion.lineas_base import LINEAS_BASE, politica_voraz  # noqa: E402
-from arkis_lab.evaluacion.protocolo import evaluar, semillas  # noqa: E402
-from arkis_lab.modelos.arkis.servicio import ServicioArkis  # noqa: E402
-from arkis_lab.modelos.bork.servicio import ServicioBork  # noqa: E402
-from arkis_lab.modelos.clark.servicio import ServicioClark  # noqa: E402
-from arkis_lab.modelos.ejemplos import Dataset  # noqa: E402
-from arkis_lab.modelos.lerk.servicio import ServicioLerk  # noqa: E402
-from arkis_lab.modelos.situacion import situacion_de  # noqa: E402
-from arkis_lab.nucleo.entorno import Entorno  # noqa: E402
+from ia_snake.evaluacion.lineas_base import LINEAS_BASE, politica_voraz  # noqa: E402
+from ia_snake.evaluacion.protocolo import evaluar, semillas  # noqa: E402
+from ia_snake.modelos.arkis.servicio import ServicioArkis  # noqa: E402
+from ia_snake.modelos.bork.servicio import ServicioBork  # noqa: E402
+from ia_snake.modelos.clark.servicio import ServicioClark  # noqa: E402
+from ia_snake.modelos.ejemplos import Dataset  # noqa: E402
+from ia_snake.modelos.lerk.servicio import ServicioLerk  # noqa: E402
+from ia_snake.modelos.situacion import situacion_de  # noqa: E402
+from ia_snake.nucleo.entorno import Entorno  # noqa: E402
 
 
 def profesor_sintetico(dificultad, episodios):
@@ -58,7 +58,7 @@ def main():
     a = ap.parse_args()
     d = a.dificultad
     prueba = semillas("prueba", a.partidas)
-    raiz = Path(tempfile.mkdtemp(prefix="arkis-medicion-"))
+    raiz = Path(tempfile.mkdtemp(prefix="ia-snake-medicion-"))
     filas = []
 
     def medir(nombre, entrenamiento, politica, t0):

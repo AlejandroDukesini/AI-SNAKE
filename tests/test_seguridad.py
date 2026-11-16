@@ -4,7 +4,7 @@ import importlib
 import pytest
 from fastapi.testclient import TestClient
 
-from arkis_lab.servidor.ajustes import ErrorConfiguracion, cargar_ajustes
+from ia_snake.servidor.ajustes import ErrorConfiguracion, cargar_ajustes
 
 TOKEN = "clave-de-prueba-muy-larga-123"
 FRONT = "https://arkis.example.app"
@@ -14,27 +14,27 @@ def test_produccion_exige_clave_y_https():
     with pytest.raises(ErrorConfiguracion):
         cargar_ajustes({"APP_ENV": "produccion"})
     with pytest.raises(ErrorConfiguracion):
-        cargar_ajustes({"APP_ENV": "produccion", "ARKIS_TOKEN": "corta"})
+        cargar_ajustes({"APP_ENV": "produccion", "IA_SNAKE_TOKEN": "corta"})
     with pytest.raises(ErrorConfiguracion):
-        cargar_ajustes({"APP_ENV": "produccion", "ARKIS_TOKEN": TOKEN,
+        cargar_ajustes({"APP_ENV": "produccion", "IA_SNAKE_TOKEN": TOKEN,
                         "CORS_ORIGINS": "http://localhost:5173"})
     with pytest.raises(ErrorConfiguracion):
         cargar_ajustes({"CORS_ORIGINS": "*"})
-    a = cargar_ajustes({"APP_ENV": "produccion", "ARKIS_TOKEN": TOKEN,
+    a = cargar_ajustes({"APP_ENV": "produccion", "IA_SNAKE_TOKEN": TOKEN,
                         "CORS_ORIGINS": f"{FRONT}/, https://otro.example.app"})
     assert a.origenes_cors == (FRONT, "https://otro.example.app")
 
 
 @pytest.fixture()
 def cliente(tmp_path, monkeypatch):
-    monkeypatch.setenv("ARKIS_LAB_DATOS", str(tmp_path))
+    monkeypatch.setenv("IA_SNAKE_DATOS", str(tmp_path))
     monkeypatch.setenv("APP_ENV", "produccion")
-    monkeypatch.setenv("ARKIS_TOKEN", TOKEN)
+    monkeypatch.setenv("IA_SNAKE_TOKEN", TOKEN)
     monkeypatch.setenv("CORS_ORIGINS", FRONT)
-    import arkis_lab.servidor.app as m
+    import ia_snake.servidor.app as m
     yield TestClient(importlib.reload(m).app)
     monkeypatch.delenv("APP_ENV")
-    monkeypatch.delenv("ARKIS_TOKEN")
+    monkeypatch.delenv("IA_SNAKE_TOKEN")
     monkeypatch.delenv("CORS_ORIGINS")
     importlib.reload(m)
 
@@ -45,17 +45,17 @@ def test_lectura_libre_escritura_con_clave(cliente):
     r = cliente.post("/api/lerk/reglas", json={"condiciones": ["libre"], "conclusion": "preferir"})
     assert r.status_code == 401
     r = cliente.post("/api/lerk/reglas", json={"condiciones": ["libre"], "conclusion": "preferir"},
-                     headers={"X-Arkis-Token": "incorrecta"})
+                     headers={"X-IA-Snake-Token": "incorrecta"})
     assert r.status_code == 401
     r = cliente.post("/api/lerk/reglas", json={"condiciones": ["libre"], "conclusion": "preferir"},
-                     headers={"X-Arkis-Token": TOKEN})
+                     headers={"X-IA-Snake-Token": TOKEN})
     assert r.status_code == 200
     assert cliente.get("/api/modelos/lerk/exportar").status_code == 401
-    assert cliente.get("/api/modelos/lerk/exportar", headers={"X-Arkis-Token": TOKEN}).status_code == 200
+    assert cliente.get("/api/modelos/lerk/exportar", headers={"X-IA-Snake-Token": TOKEN}).status_code == 200
 
 
 def test_cors_solo_para_el_origen_autorizado(cliente):
-    pre = {"Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "x-arkis-token"}
+    pre = {"Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "x-ia-snake-token"}
     ok = cliente.options("/api/sesiones", headers={"Origin": FRONT, **pre})
     assert ok.headers.get("access-control-allow-origin") == FRONT
     malo = cliente.options("/api/sesiones", headers={"Origin": "https://ajeno.example", **pre})

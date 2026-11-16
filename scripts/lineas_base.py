@@ -11,9 +11,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from arkis_lab.evaluacion.lineas_base import LINEAS_BASE  # noqa: E402
-from arkis_lab.evaluacion.protocolo import evaluar, semillas  # noqa: E402
-from arkis_lab.nucleo.config import DIFICULTADES, VERSION_MOTOR  # noqa: E402
+from ia_snake.evaluacion.lineas_base import LINEAS_BASE  # noqa: E402
+from ia_snake.evaluacion.protocolo import evaluar, semillas  # noqa: E402
+from ia_snake.nucleo.config import DIFICULTADES, VERSION_MOTOR  # noqa: E402
 
 
 def main():

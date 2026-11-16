@@ -2,7 +2,11 @@
 import { Panel } from '../components/ui';
 
 const SECCIONES = [
-  ['Qué es ARKIS AI LAB', <>
+  ['Ver el entrenamiento en vivo', <>
+    <p>En Entrenamiento verás al modelo jugar mientras entrena o se evalúa. Cada movimiento es su <b>decisión real</b>, enviada por el servidor; no hay animaciones simuladas. Se muestran su explicación, si se acerca o se aleja de la manzana, las colisiones, las manzanas, la longitud, la ocupación, el nivel E, la recompensa (solo en BORK y CLARK) y la comparación entre episodios.</p>
+    <p>Puedes pausar, reanudar, detener y cambiar el ritmo (pasos por segundo). El ritmo solo añade esperas entre pasos: el modelo aprende exactamente lo mismo. El refresco de pantalla es independiente.</p>
+  </>],
+  ['Qué es IA-SNAKE', <>
     <p>Un laboratorio donde cinco modelos resuelven el mismo Snake con metodologías de aprendizaje distintas: <b>ARKIS</b> (Machine Learning supervisado), <b>LERK</b> (aprendizaje simbólico), <b>BORK</b> (aprendizaje por refuerzo), <b>CLARK</b> (híbrido de referencia) y <b>MABU</b> (híbrido experimental, pendiente de la Etapa 5).</p>
     <p>El servidor Python es la única autoridad: reglas, percepción, recompensas, evolución y modelos viven allí. La web solo dibuja y envía tus decisiones. Ningún modelo usa redes neuronales ni Deep Learning.</p>
   </>],
@@ -27,7 +31,7 @@ const SECCIONES = [
     <p>Ocupación = longitud / casillas × 100. C(E_n) = techo(n·N/8). E1…E8 = 12,5 % … 100 %. Llegar a E1 o más exige haber comido al menos una manzana. El récord histórico (mejor nivel de cualquier episodio) se guarda por modelo y dificultad y nunca baja.</p>
   </>],
   ['ARKIS · Machine Learning supervisado', <>
-    <p><b>Random Forest</b> (scikit-learn) sobre 27 características calculadas de los tres sentidos. Solo aprende de etiquetas tuyas: demostraciones (Simulador → Demostrar), correcciones y capturas que tú etiquetas. Solo se entrena con ejemplos aprobados.</p>
+    <p><b>Random Forest</b> (scikit-learn) sobre 27 características calculadas de los tres sentidos. Una <b>etiqueta</b> es la respuesta que le das al modelo: la acción correcta en una situación. ARKIS solo aprende de etiquetas tuyas: el etiquetado guiado (Entrenamiento → ARKIS → Etiquetar), las demostraciones del Simulador, las correcciones y las capturas. Solo se entrena con ejemplos revisados. Una etiqueta no es una recompensa: no dice «bien» o «mal», dice cuál era la respuesta correcta.</p>
     <p>La validación agrupa por episodio (GroupKFold) para que pasos casi idénticos no caigan a la vez en entrenamiento y prueba. Métricas: accuracy, precision, recall, F1, matriz de confusión y errores navegables. Aumento opcional por las 8 simetrías del tablero (exactas: giran el ejemplo y su etiqueta). El modo automático reentrena con lo aprobado y se evalúa; nunca etiqueta solo. «Recopilar dudas» guarda sin etiqueta las situaciones donde duda, para que tú las etiquetes.</p>
   </>],
   ['LERK · Aprendizaje simbólico', <>

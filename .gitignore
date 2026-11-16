@@ -28,7 +28,7 @@ config.json
 .DS_Store
 Thumbs.db
 
-# ARKIS AI LAB: datos de entrenamiento del usuario (por modelo)
+# IA-SNAKE: datos de entrenamiento del usuario (por modelo)
 laboratorio/
 .pytest_cache/
 
