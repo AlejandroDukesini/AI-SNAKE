@@ -1,97 +1,65 @@
-/* ============================================================================
-   CLIENTE DE LA API
-   ----------------------------------------------------------------------------
-   Todas las llamadas al servidor de Python, en un solo sitio. Los componentes
-   nunca hacen fetch directamente: asi cambiar una ruta se toca aqui y ya.
+/* Cliente del servidor del laboratorio. Rutas relativas: en desarrollo Vite hace de
+   proxy hacia el puerto 8000; en producción el mismo servidor sirve la web. */
 
-   Las rutas son RELATIVAS a proposito. En desarrollo el proxy de Vite las
-   reenvia al puerto 8000; en un despliegue MONOLITICO (el mismo servidor sirve
-   web + API, como en Render con run.py --prod) tambien valen tal cual.
-
-   Pero en un despliegue PARTIDO (frontend en Vercel/Netlify, backend en Render)
-   el frontend vive en OTRO dominio: una ruta relativa como /api/config pega
-   contra Vercel, que no tiene backend, y devuelve 404. Para ese caso se define
-   VITE_BACKEND_URL con la URL del backend de Render y se antepone a cada ruta.
-   ============================================================================ */
-
-import { demoFetch, demoSocket } from './demo/server';
-
-/* Base de las peticiones HTTP.
-   - Con VITE_BACKEND_URL definida: esa URL, sin la barra final (evita el //
-     duplicado al concatenar con rutas que empiezan por /).
-   - Sin definir: cadena vacia => rutas relativas, comportamiento local/monolitico. */
-const API_BASE = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
-
-/* MODO BORRADOR (VITE_DEMO=true): para hostings estaticos como Netlify, donde
-   el servidor de Python no existe. Las peticiones y los sockets los responde un
-   backend simulado en el propio navegador (ver lib/demo/server.js). */
-export const DEMO = import.meta.env.VITE_DEMO === 'true';
-
-async function req(url, options) {
-  const res = DEMO ? await demoFetch(url, options) : await fetch(API_BASE + url, options);
-  if (!res.ok) {
-    // El detalle lo pone FastAPI; si la respuesta no es JSON, no reventar aqui.
-    const detalle = await res.json().catch(() => ({}));
-    throw new Error(detalle.detail || `Error ${res.status}`);
+async function pedir(metodo, ruta, cuerpo) {
+  const r = await fetch(ruta, {
+    method: metodo,
+    headers: cuerpo !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined,
+  });
+  if (!r.ok) {
+    let msg = `${r.status} ${r.statusText}`;
+    try { const j = await r.json(); msg = j.detail ? (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)) : msg; } catch { /* sin cuerpo */ }
+    throw new Error(msg);
   }
-  return res.json();
+  const tipo = r.headers.get('content-type') || '';
+  return tipo.includes('application/json') ? r.json() : r.blob();
 }
-
-const json = (metodo, body) => ({
-  method: metodo,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-});
 
 export const api = {
-  getConfig: () => req('/api/config'),
-  saveConfig: (patch) => req('/api/config', json('PUT', patch)),
-
-  listModels: (soloFavoritos = false) =>
-    req(`/api/models${soloFavoritos ? '?favorites=true' : ''}`),
-
-  /* Comprueba si un nombre ya tiene carpeta. Es lo que permite avisar de si se
-     va a CREAR un especimen nuevo o CONTINUAR el linaje de uno existente. */
-  checkName: (nombre) => req(`/api/exists/${encodeURIComponent(nombre)}`),
-
-  setFavorite: (carpeta, favorito) =>
-    req(`/api/models/${encodeURIComponent(carpeta)}/favorite`, json('PUT', { favorito })),
-
-  /* Renombra una IA sin perder su entrenamiento. El servidor mueve la carpeta
-     si el nombre nuevo cambia el slug; devuelve 409 si ya existe otra igual. */
-  renameModel: (carpeta, nombre) =>
-    req(`/api/models/${encodeURIComponent(carpeta)}`, json('PATCH', { nombre })),
-
-  deleteModel: (carpeta) =>
-    req(`/api/models/${encodeURIComponent(carpeta)}`, { method: 'DELETE' }),
-
-  clearHistory: () => req('/api/models?keep_favorites=true', { method: 'DELETE' }),
+  get: (ruta) => pedir('GET', ruta),
+  post: (ruta, cuerpo = {}) => pedir('POST', ruta, cuerpo),
+  patch: (ruta, cuerpo) => pedir('PATCH', ruta, cuerpo),
+  del: (ruta) => pedir('DELETE', ruta),
 };
 
-/* URL absoluta de WebSocket.
-   - Con VITE_BACKEND_URL (despliegue partido): se apunta al backend de Render,
-     convirtiendo el esquema HTTP a su equivalente WebSocket:
-         https://  ->  wss://      http://  ->  ws://
-     Sin convertir el esquema, el navegador rechaza abrir el socket.
-   - Sin VITE_BACKEND_URL (local o monolitico): se deriva de la pagina actual,
-     asi funciona igual en localhost (ws://) que tras el HTTPS de un hosting (wss://).
-
-   Fuente unica de la URL de WS: la usan tanto useSocket como TrainView, que abre
-   su socket de entrenamiento directamente. */
-export function wsURL(path) {
-  const base = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
-  if (base) {
-    if (base.startsWith('https://')) return `wss://${base.slice('https://'.length)}${path}`;
-    if (base.startsWith('http://'))  return `ws://${base.slice('http://'.length)}${path}`;
-    // Ya venia como ws:// o wss:// (o sin esquema): usarla tal cual.
-    return `${base}${path}`;
-  }
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${location.host}${path}`;
+export async function descargar(ruta, nombre) {
+  const blob = await api.get(ruta);
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: nombre });
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
-/* Abre un WebSocket hacia `path`. En modo borrador devuelve un socket simulado
-   con la misma interfaz (onopen/onmessage/onclose, send, close, readyState). */
-export function openSocket(path) {
-  return DEMO ? demoSocket(path) : new WebSocket(wsURL(path));
+export function archivoABase64(archivo) {
+  return new Promise((ok, mal) => {
+    const lector = new FileReader();
+    lector.onload = () => ok(String(lector.result).split(',')[1]);
+    lector.onerror = mal;
+    lector.readAsDataURL(archivo);
+  });
+}
+
+export const FLECHA = { arriba: '↑', abajo: '↓', izquierda: '←', derecha: '→' };
+export const ACCIONES = ['arriba', 'abajo', 'izquierda', 'derecha'];
+export const TECLAS = {
+  ArrowUp: 'arriba', ArrowDown: 'abajo', ArrowLeft: 'izquierda', ArrowRight: 'derecha',
+  w: 'arriba', s: 'abajo', a: 'izquierda', d: 'derecha',
+};
+
+export const ESTADOS = {
+  sin_entrenar: 'Sin entrenar', entrenado: 'Entrenado', evaluado: 'Evaluado',
+  validado: 'Validado', preentrenado: 'Preentrenado', experimentacion: 'En experimentación',
+  pendiente: 'Pendiente (Etapa 5)',
+};
+
+export const DIFICULTADES = { facil: 'Fácil 4×4', medio: 'Medio 8×8', dificil: 'Difícil 16×16' };
+
+export function fmt(v, dec = 2) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  return typeof v === 'number' ? v.toLocaleString('es', { maximumFractionDigits: dec }) : String(v);
+}
+
+export function pct(v, dec = 1) {
+  return v === null || v === undefined ? '—' : `${(v * 100).toLocaleString('es', { maximumFractionDigits: dec })} %`;
 }

@@ -6,4 +6,3 @@ skops>=0.10            # serialización segura de modelos (sin pickle)
 # Servidor del laboratorio
 fastapi>=0.110
 uvicorn[standard]>=0.27
-python-multipart>=0.0.9   # importación de modelos (subida de archivos)
