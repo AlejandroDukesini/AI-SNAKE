@@ -10,7 +10,7 @@ from arkis_lab.evaluacion.lineas_base import politica_azar, politica_voraz
 from arkis_lab.evaluacion.protocolo import estadistico, evaluar, semillas
 from arkis_lab.modelos.arkis.caracteristicas import NOMBRES, caracteristicas
 from arkis_lab.modelos.arkis.clasificador import ErrorEntrenamiento, entrenar
-from arkis_lab.modelos.arkis.dataset import Dataset, ErrorDataset
+from arkis_lab.modelos.ejemplos import Dataset, ErrorDataset
 from arkis_lab.modelos.arkis.servicio import ServicioArkis
 from arkis_lab.modelos.situacion import (SIMETRIAS, percepcion_de, situacion_de,
                                          transformar_accion, transformar_situacion)

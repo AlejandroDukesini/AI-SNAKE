@@ -13,7 +13,7 @@ from .. import base
 from ..servicio import ServicioModelo
 from ..situacion import situacion_de
 from .clasificador import ArkisAgente, entrenar
-from .dataset import Dataset
+from ..ejemplos import Dataset
 
 
 class ServicioArkis(ServicioModelo):
