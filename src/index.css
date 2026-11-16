@@ -111,15 +111,6 @@ body {
   }
 }
 
-/* Latido del contador de la cuenta atras. */
-@keyframes countPop {
-  0%   { transform: scale(.45); opacity: 0; }
-  55%  { transform: scale(1.12); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
-.animate-count { animation: countPop .55s ease-out; }
-
 @keyframes modalIn {
   from { transform: translateY(8px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
@@ -127,22 +118,12 @@ body {
 
 .animate-modal { animation: modalIn .18s ease-out; }
 
-/* Visualizador de la red (Crear IA): una onda de activacion que recorre las
-   capas de izquierda a derecha. Los nodos laten desfasados por capa (nodeGlow)
-   y un pulso viaja por cada conexion (flowDot), representando el flujo de datos.
-   Ambas respetan prefers-reduced-motion por la regla global de arriba. */
-@keyframes nodeGlow {
-  0%, 100% { opacity: .25; transform: scale(1); }
-  50%      { opacity: 1;  transform: scale(1.4); }
-}
-
-.node-glow { animation: nodeGlow 1.8s ease-in-out infinite; }
-
-@keyframes flowDot {
-  0%   { left: 0;    opacity: 0; }
-  20%  { opacity: 1; }
-  80%  { opacity: 1; }
-  100% { left: 100%; opacity: 0; }
-}
-
-.flow-dot { animation: flowDot 1.8s linear infinite; }
+/* Tablas densas del laboratorio */
+.tabla { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+.tabla th { text-align: left; font-weight: 500; color: var(--muted); padding: .4rem .5rem;
+  border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tabla td { padding: .4rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tabla td.num, .tabla th.num { text-align: right; font-variant-numeric: tabular-nums; }
+pre.codigo { font-family: Consolas, "SF Mono", monospace; font-size: .75rem; line-height: 1.45;
+  background: var(--surface2); border: 1px solid var(--line); border-radius: 10px;
+  padding: .75rem; overflow: auto; max-height: 24rem; white-space: pre; }

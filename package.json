@@ -1,19 +1,17 @@
 {
-  "name": "snake-ia-neuroevolucion",
+  "name": "arkis-ai-lab",
   "private": true,
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
-  "description": "Snake resuelto por neuroevolucion. React + Vite en el frontend; la IA (NumPy) corre en Python.",
+  "description": "ARKIS AI LAB: cinco metodologias de aprendizaje (ML, simbolico, refuerzo e hibridos) resolviendo Snake. React + Vite; los modelos corren en Python.",
   "scripts": {
     "dev": "python run.py",
     "vite": "vite",
-    "server": "python ai_server.py",
+    "server": "python -m uvicorn arkis_lab.servidor.app:app --port 8000",
     "build": "vite build",
-    "dev:demo": "vite --mode demo",
-    "build:demo": "vite build --mode demo",
     "start": "python run.py --prod",
     "preview": "vite preview",
-    "migrar": "python migrar_historial.py"
+    "test": "python -m pytest"
   },
   "dependencies": {
     "react": "^18.3.1",

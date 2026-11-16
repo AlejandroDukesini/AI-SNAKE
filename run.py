@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-  SNAKE IA - ORQUESTADOR
+  ARKIS AI LAB - ORQUESTADOR
 ================================================================================
   Levanta el proyecto entero con un solo comando:
 
@@ -9,7 +9,7 @@
       npm start       -> python run.py --prod     (web ya compilada)
 
   En DESARROLLO arranca dos procesos en paralelo:
-      1. El servidor de la IA  (uvicorn -> ai_server.py)  en el puerto 8000
+      1. El servidor del laboratorio (uvicorn -> arkis_lab.servidor.app) en el puerto 8000
       2. El servidor de Vite   (npm run vite)             en el puerto 5173
 
   Se abre el navegador en Vite (5173), que hace de proxy hacia el 8000 para
@@ -107,7 +107,7 @@ def comprobar_dependencias(prod):
     dejar al usuario mirando una pantalla en blanco.
     """
     try:
-        import fastapi, uvicorn, numpy       # noqa: F401
+        import fastapi, uvicorn, numpy, sklearn, skops       # noqa: F401
     except ImportError as exc:
         log("ERROR", f"Falta una dependencia de Python: {exc.name}")
         log("ERROR", "Instalala con:  pip install -r requirements.txt")
@@ -140,8 +140,8 @@ def lanzar_api(host):
     basta con `127.0.0.1`, que ademas no expone el servidor a la red local.
     """
     # `sys.executable` en vez de "python": asi se usa el MISMO interprete que
-    # ejecuta run.py, que es el que tiene numpy y fastapi instalados.
-    cmd = [sys.executable, "-m", "uvicorn", "ai_server:app",
+    # ejecuta run.py, que es el que tiene las dependencias instaladas.
+    cmd = [sys.executable, "-m", "uvicorn", "arkis_lab.servidor.app:app",
            "--host", host, "--port", str(API_PORT)]
     log("orquestador", f"IA        -> http://{host}:{API_PORT}")
     return subprocess.Popen(cmd, cwd=SCRIPT_DIR)
@@ -206,7 +206,7 @@ def main():
 
     print()
     print("=" * 64)
-    print("  SNAKE IA - Neuroevolucion" + ("  [produccion]" if prod else "  [desarrollo]"))
+    print("  ARKIS AI LAB" + ("  [produccion]" if prod else "  [desarrollo]"))
     print("=" * 64)
 
     if not comprobar_dependencias(prod) or not comprobar_puertos(prod):

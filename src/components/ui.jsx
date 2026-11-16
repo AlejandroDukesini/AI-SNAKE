@@ -1,243 +1,152 @@
-/* ============================================================================
-   Piezas de interfaz reutilizables
-   ----------------------------------------------------------------------------
-   Estilo sobrio: mucho aire, bordes suaves, una sola tipografia y un unico
-   color de acento. Todos los colores salen de las variables del tema, nunca
-   fijos, para que los tres temas funcionen sin tocar los componentes.
-   ============================================================================ */
+/* Piezas de interfaz. Todos los colores salen de las variables del tema. */
+import { useState } from 'react';
+import { ESTADOS } from '../lib/api';
 
-import { useEffect } from 'react';
-
-export function Panel({ children, className = '' }) {
+export function Panel({ children, className = '', titulo, accion }) {
   return (
-    <div className={`bg-surface border border-line rounded-panel p-6 ${className}`}>
+    <section className={`bg-surface border border-line rounded-panel p-5 ${className}`}>
+      {(titulo || accion) && (
+        <div className="flex items-center justify-between gap-3 mb-3">
+          {titulo && <h2 className="text-base font-semibold tracking-tight">{titulo}</h2>}
+          {accion}
+        </div>
+      )}
       {children}
+    </section>
+  );
+}
+
+export function Nota({ children, className = '' }) {
+  return <p className={`text-sm leading-relaxed text-muted ${className}`}>{children}</p>;
+}
+
+export function Dato({ etiqueta, valor, acento = false, ayuda }) {
+  return (
+    <div className="bg-surface2 border border-line rounded-xl px-3 py-2" title={ayuda}>
+      <div className="text-xs text-muted">{etiqueta}</div>
+      <div className={`text-lg font-semibold tabular-nums ${acento ? 'text-accent' : ''}`}>{valor}</div>
     </div>
   );
 }
 
-export function Title({ children, className = '' }) {
+const VARIANTES = {
+  normal: 'bg-surface2 text-ink border-line hover:bg-line',
+  primario: 'bg-accent text-on-accent border-accent hover:brightness-110 font-medium',
+  peligro: 'bg-danger text-on-danger border-danger hover:brightness-110 font-medium',
+};
+
+export function Boton({ variante = 'normal', className = '', ...props }) {
   return (
-    <h2 className={`text-lg font-semibold tracking-tight text-ink ${className}`}>
+    <button {...props}
+      className={`px-3 py-1.5 rounded-lg border text-sm transition disabled:opacity-40
+        disabled:cursor-not-allowed ${VARIANTES[variante]} ${className}`} />
+  );
+}
+
+export function Campo({ etiqueta, ayuda, children, className = '' }) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="block text-xs text-muted mb-1" title={ayuda}>{etiqueta}</span>
       {children}
-    </h2>
+    </label>
   );
 }
 
-export function Hint({ children, className = '' }) {
+const ENTRADA = 'w-full bg-surface2 border border-line rounded-lg px-2 py-1.5 text-sm text-ink';
+
+export function Numero({ valor, cambiar, min, max, paso = 1 }) {
+  return <input type="number" className={ENTRADA} value={valor} min={min} max={max} step={paso}
+    onChange={(e) => cambiar(e.target.value === '' ? '' : Number(e.target.value))} />;
+}
+
+export function Selector({ valor, cambiar, opciones }) {
   return (
-    <p className={`text-sm leading-relaxed text-muted ${className}`}>{children}</p>
+    <select className={ENTRADA} value={valor ?? ''} onChange={(e) => cambiar(e.target.value)}>
+      {Object.entries(opciones).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+    </select>
   );
 }
 
-export function Stat({ label, value, accent = false }) {
+export function Interruptor({ valor, cambiar, etiqueta }) {
   return (
-    <div className="bg-surface2 border border-line rounded-xl px-4 py-3">
-      <div className="text-xs text-muted">{label}</div>
-      <div className={`text-2xl font-semibold tabular-nums ${accent ? 'text-accent' : 'text-ink'}`}>
-        {value}
-      </div>
+    <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+      <input type="checkbox" checked={!!valor} onChange={(e) => cambiar(e.target.checked)}
+        className="accent-[var(--accent)] w-4 h-4" />
+      {etiqueta}
+    </label>
+  );
+}
+
+export function Segmentado({ opciones, valor, cambiar }) {
+  return (
+    <div className="inline-flex flex-wrap bg-surface2 border border-line rounded-lg p-0.5">
+      {Object.entries(opciones).map(([k, v]) => (
+        <button key={k} onClick={() => cambiar(k)}
+          className={`px-3 py-1 text-sm rounded-md transition ${valor === k ? 'bg-accent text-on-accent' : 'text-muted hover:text-ink'}`}>
+          {v}
+        </button>
+      ))}
     </div>
   );
 }
 
-/* Insignia del nivel de inteligencia (N0…N5). El nivel lo calcula el servidor a
-   partir de la cobertura del tablero (ver docs/ROADMAP.md); aqui solo se pinta. Muestra
-   el codigo corto (N2) y, al pasar el raton, la etiqueta completa. */
-export function LevelBadge({ nivel, etiqueta, className = '' }) {
-  if (nivel === undefined || nivel === null) return null;
-  const corto = etiqueta ? etiqueta.split('·')[0].trim() : `N${nivel}`;
+export function Insignia({ children, tono = 'normal', title }) {
+  const tonos = {
+    normal: 'border-line text-muted',
+    acento: 'border-accent text-accent bg-accent/10',
+    peligro: 'border-danger text-danger bg-danger/10',
+    ok: 'border-snake text-snake bg-snake/10',
+  };
+  return <span title={title} className={`inline-flex items-center px-2 py-0.5 rounded-md border text-xs font-medium ${tonos[tono]}`}>{children}</span>;
+}
+
+export function InsigniaEstado({ estado }) {
+  const tono = { validado: 'ok', evaluado: 'acento', entrenado: 'acento', preentrenado: 'ok', pendiente: 'normal' }[estado] || 'normal';
+  return <Insignia tono={tono}>{ESTADOS[estado] || estado}</Insignia>;
+}
+
+export function NivelE({ nivel, record }) {
   return (
-    <span
-      title={etiqueta || corto}
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border
-        border-accent text-accent bg-accent/10 text-xs font-medium ${className}`}
-    >
-      🧠 {corto}
+    <span className="inline-flex items-center gap-1 text-xs">
+      <Insignia tono="acento" title="Nivel de la partida actual">E{nivel ?? 0}</Insignia>
+      {record !== undefined && <Insignia title="Mejor nivel histórico">récord E{record ?? 0}</Insignia>}
     </span>
   );
 }
 
-/* Rendimiento HABITUAL de un especimen: media de frutas por partida en las
-   semillas de prueba fijas (`eval`, ver snake_neuroevolution.evaluar). Es la
-   cifra que describe al modelo; el record de UNA partida no. null si no hay. */
-export function textoRendimiento(ev) {
-  if (!ev || typeof ev.frutas_media !== 'number') return null;
-  const ic = Array.isArray(ev.frutas_ic95) ? ` (IC95 ${ev.frutas_ic95[0]}–${ev.frutas_ic95[1]})` : '';
-  return `${ev.frutas_media} frutas/partida${ic} · mediana ${ev.frutas_mediana}`
-       + ` · ${ev.episodios} partidas en ${ev.grid}×${ev.grid}`;
+export function Aviso({ error }) {
+  if (!error) return null;
+  return <div className="text-sm text-danger border border-danger/40 bg-danger/10 rounded-lg px-3 py-2">{error}</div>;
 }
 
-const VARIANTES = {
-  ghost: 'bg-surface2 text-ink border-line hover:bg-line',
-  primary: 'bg-accent text-on-accent border-accent hover:brightness-110 font-medium',
-  danger: 'bg-danger text-on-danger border-danger hover:brightness-110 font-medium',
-};
-
-export function Button({ variant = 'ghost', className = '', ...props }) {
-  return (
-    <button
-      {...props}
-      className={`px-4 py-2.5 rounded-xl border text-sm transition
-        active:translate-y-px disabled:opacity-40 disabled:pointer-events-none
-        focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
-        ${VARIANTES[variant]} ${className}`}
-    />
-  );
+export function Vacio({ children }) {
+  return <div className="text-sm text-muted border border-dashed border-line rounded-xl px-4 py-6 text-center">{children}</div>;
 }
 
-export function IconButton({ label, className = '', ...props }) {
+export function Progreso({ trabajo, cancelar }) {
+  if (!trabajo) return null;
+  const p = trabajo.total ? trabajo.hechos / trabajo.total : 0;
   return (
-    <button
-      {...props}
-      title={label}
-      aria-label={label}
-      className={`w-9 h-9 grid place-items-center rounded-lg border border-line
-        bg-surface2 text-ink text-sm transition hover:bg-accent hover:text-on-accent
-        hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2
-        focus-visible:outline-accent ${className}`}
-    />
-  );
-}
-
-export function Field({ label, help, children }) {
-  return (
-    <div className="mb-5">
-      {label && <label className="block text-sm text-ink mb-2">{label}</label>}
-      {children}
-      {help && <p className="text-xs text-muted mt-2 leading-relaxed">{help}</p>}
+    <div className="bg-surface2 border border-line rounded-xl p-3 text-sm space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span>Trabajo <b>{trabajo.tipo}</b> · {trabajo.estado.replace('_', ' ')} · {trabajo.hechos}/{trabajo.total || '?'} · {trabajo.segundos} s</span>
+        {trabajo.estado === 'en_curso' && cancelar && <Boton onClick={cancelar}>Cancelar</Boton>}
+      </div>
+      <div className="h-1.5 bg-line rounded-full overflow-hidden"><div className="h-full bg-accent transition-all" style={{ width: `${p * 100}%` }} /></div>
+      {trabajo.ultimo && <div className="text-xs text-muted">Último episodio: {trabajo.ultimo.manzanas} manzanas · {trabajo.ultimo.pasos} pasos · E{trabajo.ultimo.nivel} · fin: {trabajo.ultimo.causa_fin}</div>}
+      {trabajo.error && <Aviso error={trabajo.error} />}
     </div>
   );
 }
 
-/* Deslizador + casilla numérica para el mismo valor. Nace de Configuración, que
-   ya usaba esta pareja: el deslizador es cómodo para tantear y el número es la
-   única forma de poner un valor exacto sin pelearse con el ratón. Al haber tres
-   controles así en Entrenar (agentes, generaciones, herencias) se extrae aquí en
-   vez de copiar el marcado cuatro veces. */
-export function RangeField({ label, help, value, onChange, min, max, step = 1,
-                            disabled = false }) {
-  // Un solo manejador para los dos controles: no pueden desincronizarse porque
-  // no hay dos estados, solo dos formas de tocar el mismo.
-  const cambiar = (e) => onChange(Number(e.target.value));
-
+export function Plegable({ titulo, children, abierto = false }) {
+  const [a, setA] = useState(abierto);
   return (
-    <Field label={label} help={help}>
-      <div className="flex items-center gap-4">
-        <input
-          type="range"
-          min={min} max={max} step={step} value={value}
-          disabled={disabled}
-          onChange={cambiar}
-          className="flex-1 accent-accent disabled:opacity-40"
-        />
-        <input
-          type="number"
-          min={min} max={max} step={step} value={value}
-          disabled={disabled}
-          onChange={cambiar}
-          className="w-20 bg-surface2 border border-line rounded-xl px-3 py-2
-                     text-ink text-center tabular-nums focus:outline-2
-                     focus:outline-offset-2 focus:outline-accent
-                     disabled:opacity-40"
-        />
-      </div>
-    </Field>
-  );
-}
-
-/* Interruptor para una opción de sí o no. Es un <button> real con aria-pressed,
-   no un div pintado: así funciona con teclado y lo anuncian los lectores de
-   pantalla sin trabajo extra. */
-export function Toggle({ checked, onChange, label, help, disabled = false }) {
-  return (
-    <div className="flex items-start justify-between gap-4 bg-surface2 border
-                    border-line rounded-xl px-4 py-3 mb-5">
-      <div className="min-w-0">
-        <div className="text-sm text-ink">{label}</div>
-        {help && <p className="text-xs text-muted mt-1 leading-relaxed">{help}</p>}
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={typeof label === 'string' ? label : undefined}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={`shrink-0 mt-0.5 w-11 h-6 rounded-full border transition
-          disabled:opacity-40 disabled:pointer-events-none
-          focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
-          ${checked ? 'bg-accent border-accent' : 'bg-surface border-line'}`}
-      >
-        <span
-          className={`block w-4 h-4 rounded-full bg-on-accent transition-transform
-            ${checked ? 'translate-x-6' : 'translate-x-1 bg-muted'}`}
-        />
+    <div className="border border-line rounded-xl">
+      <button onClick={() => setA(!a)} className="w-full text-left px-3 py-2 text-sm font-medium flex justify-between">
+        {titulo}<span className="text-muted">{a ? '−' : '+'}</span>
       </button>
-    </div>
-  );
-}
-
-export function Empty({ children }) {
-  return (
-    <div className="border border-dashed border-line rounded-panel py-16 px-6
-                    text-center text-muted leading-relaxed">
-      {children}
-    </div>
-  );
-}
-
-/* Modal. ESC y el clic en el fondo cierran, que es lo que todo el mundo espera.
-   El listener se limpia al desmontar para no acumular uno por apertura. */
-export function Modal({ open, onClose, title, children, danger = false }) {
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center
-                 justify-center p-5 overflow-y-auto"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="animate-modal w-full max-w-md bg-surface border border-line
-                   rounded-panel p-6 shadow-2xl"
-      >
-        <h3 className={`text-lg font-semibold mb-3 ${danger ? 'text-danger' : 'text-ink'}`}>
-          {title}
-        </h3>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/* Segmented control (estilo iOS): la forma mas clara de elegir entre pocas
-   opciones excluyentes, como el tamano del tablero. */
-export function Segmented({ options, value, onChange }) {
-  return (
-    <div className="inline-flex p-1 bg-surface2 border border-line rounded-xl gap-1">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value)}
-          aria-pressed={value === o.value}
-          className={`px-4 py-2 rounded-lg text-sm transition
-            ${value === o.value
-              ? 'bg-accent text-on-accent font-medium'
-              : 'text-muted hover:text-ink'}`}
-        >
-          {o.label}
-        </button>
-      ))}
+      {a && <div className="px-3 pb-3">{children}</div>}
     </div>
   );
 }
