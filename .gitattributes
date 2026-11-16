@@ -1,0 +1,3 @@
+# Los scripts de shell se ejecutan en Linux (contenedor): siempre LF
+*.sh text eol=lf
+Dockerfile text eol=lf

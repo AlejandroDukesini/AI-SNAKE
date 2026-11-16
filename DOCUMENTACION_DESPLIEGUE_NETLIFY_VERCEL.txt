@@ -1,0 +1,291 @@
+ARKIS AI LAB - DOCUMENTACION DE DESPLIEGUE EN NETLIFY Y VERCEL
+==============================================================
+Fecha: 2026-11-16 · Rama: despliegue -> Beta
+
+RESUMEN EN UNA LINEA
+--------------------
+Netlify y Vercel publican el FRONTEND; el BACKEND PYTHON (FastAPI) se ejecuta en un
+contenedor con disco persistente (Dockerfile; ejemplo listo para Render en render.yaml).
+El frontend lo llama en la URL de VITE_API_URL. La logica sigue entera en Python.
+
+ESTADO DE VERIFICACION (sin adornos)
+------------------------------------
+  Verificado en este equipo:
+    - npm run build / build:frontend / build:backend / build:netlify / build:vercel
+    - Backend real (uvicorn) en modo produccion: clave, CORS, errores, SPA, exportacion
+    - 112 pruebas automaticas (pytest)
+  NO verificado (requiere tus cuentas o herramientas que no hay en este equipo):
+    - Ningun despliegue real en Netlify, Vercel ni Render (no hay credenciales ni CLIs).
+    - La imagen Docker no se construyo: Docker no esta instalado aqui.
+    - La interfaz no se ha abierto en un navegador contra el backend desplegado.
+
+
+1. ARQUITECTURA ENCONTRADA
+--------------------------
+  - Frontend: React 18 + Vite 6 + Tailwind 4. Salida en dist/. Todas las llamadas pasan
+    por src/lib/api.js con rutas relativas /api/... Sin URLs fijas en componentes.
+  - Backend: Python 3.10+ (probado con 3.13), FastAPI. Entrada: arkis_lab/servidor/app.py
+    (instancia `app`). 43 rutas /api (GET, POST, PATCH, DELETE).
+  - Estado del backend:
+      * sesiones de juego en memoria del proceso,
+      * entrenamientos largos en hilos de fondo (minutos),
+      * persistencia en disco local: laboratorio/<modelo>/ (versiones, JSON, SQLite).
+  - Infraestructura: no habia netlify.toml ni vercel.json (los anteriores eran del modo
+    borrador ya retirado). Sin CORS, sin proteccion de escritura, /docs publico,
+    package-lock.json ignorado (builds no reproducibles), .env no ignorado.
+  - Secretos expuestos: ninguno encontrado.
+
+2. POR QUE EL BACKEND NO VA EN FUNCIONES SERVERLESS
+---------------------------------------------------
+  Netlify: sus funciones solo admiten JavaScript/TypeScript y Go. Python solo existe
+    durante el build, no en produccion. => No puede ejecutar este backend.
+  Vercel: SI ejecuta FastAPI como funcion Python (paquete hasta 500 MB, hasta 300 s en
+    Hobby). Pero este backend necesita:
+      - memoria compartida entre peticiones (sesiones de juego en vivo),
+      - hilos que siguen trabajando despues de responder (entrenamientos),
+      - un disco que no se borre (SQLite y versiones de los modelos).
+    En una funcion, cada invocacion puede caer en otra instancia, los hilos se congelan al
+    responder y solo /tmp es escribible (y efimero). Funcionaria a medias y PERDERIA DATOS.
+    Adaptarlo exigiria rehacer el almacenamiento (base de datos externa), los trabajos
+    (cola externa) y las sesiones: eso es reconstruir el backend, y no se hizo.
+  => Estrategia aplicada (orden de preferencia 3 del encargo): Python conserva el backend
+     y se ejecuta en un servicio de contenedores con disco persistente.
+
+3. ARQUITECTURA FINAL
+---------------------
+      Navegador
+         |  https://<sitio>.netlify.app   o   https://<sitio>.vercel.app
+         v
+   [Netlify / Vercel]  -- solo archivos estaticos de dist/ (SPA)
+         |  fetch(VITE_API_URL + "/api/...")   cabecera X-Arkis-Token si hay clave
+         v
+   [Contenedor Docker: uvicorn + FastAPI]  https://<backend>  (p. ej. Render)
+         |  APP_ENV=produccion · ARKIS_TOKEN · CORS_ORIGINS · ARKIS_LAB_DATOS=/datos
+         v
+   [Disco persistente /datos]  laboratorio de cada modelo (versiones, SQLite)
+
+  El contenedor tambien sirve la web (rutas relativas), asi que por si solo es un
+  despliegue completo de un unico dominio. Netlify y Vercel son la opcion para publicar
+  la web en su CDN.
+
+4. FRONTEND
+-----------
+  - src/lib/api.js es el UNICO cliente HTTP: URL base = VITE_API_URL (vacia = relativa),
+    limite de 30 s por peticion (120 s en operaciones largas), mensajes claros para errores
+    de conexion, respuestas no JSON, 401 y errores del servidor (sin detalles internos).
+  - La clave de escritura NO va en el build: si el backend la exige (/api/salud ->
+    requiere_clave), la interfaz muestra un campo «Clave del laboratorio»; se guarda solo en
+    el navegador del usuario (localStorage) y se envia como cabecera X-Arkis-Token.
+  - SPA: Netlify ([[redirects]] /* -> /index.html 200) y Vercel (rewrite a /index.html);
+    los archivos reales tienen prioridad.
+
+5. BACKEND
+----------
+  - arkis_lab/servidor/ajustes.py: lee y VALIDA el entorno al arrancar. En produccion, sin
+    ARKIS_TOKEN (>= 16 caracteres) el proceso no arranca; CORS sin comodines y solo https.
+  - Middleware: con clave definida, POST/PATCH/PUT/DELETE y la exportacion exigen
+    X-Arkis-Token (comparacion en tiempo constante). Lectura libre.
+  - CORS: solo los origenes de CORS_ORIGINS, sin credenciales; cabeceras Content-Type y
+    X-Arkis-Token; es el middleware mas externo (los 401 tambien llevan CORS).
+  - Errores no previstos: 500 generico en produccion (detalle solo en el log).
+  - /docs y /openapi.json desactivados en produccion. /api/... inexistente -> 404 JSON.
+  - Importacion limitada a ~50 MB y base64 validado.
+  - arkis_lab/servidor/verificar.py: verificacion real de arranque (dependencias,
+    configuracion, importacion de la app y peticiones de prueba).
+  - Un solo proceso (--workers 1) y una sola instancia: el estado es local.
+
+6. CONFIGURACION DE NETLIFY (netlify.toml)
+------------------------------------------
+  build.command = npm run build:netlify     build.publish = dist
+  NODE_VERSION = 20, PYTHON_VERSION = 3.12 (Netlify instala requirements.txt en el build si
+  existe; con 3.12 se instala bien y el build verifica que el backend arranca).
+  Redireccion SPA, cabeceras de seguridad (CSP, nosniff, DENY, Referrer-Policy) y cache
+  inmutable para /assets/*. Sin funciones: Netlify no ejecuta Python en produccion.
+
+7. CONFIGURACION DE VERCEL (vercel.json)
+----------------------------------------
+  framework vite · installCommand npm ci · buildCommand npm run build:vercel ·
+  outputDirectory dist · rewrite SPA · mismas cabeceras de seguridad.
+  No hay carpeta api/: Vercel no crea funciones. El backend no se ejecuta en Vercel por los
+  motivos del punto 2.
+
+8. ARCHIVOS CREADOS
+-------------------
+  netlify.toml                         configuracion de Netlify
+  vercel.json                          configuracion de Vercel
+  Dockerfile                           imagen del backend (+ web) en 2 etapas
+  docker-entrypoint.sh                 ajusta el dueño del disco y baja privilegios
+  .dockerignore                        excluye datos, pruebas, git y caches de la imagen
+  render.yaml                          blueprint de ejemplo para Render (disco persistente)
+  .env.example                         plantilla de variables
+  .gitattributes                       *.sh y Dockerfile siempre con LF
+  scripts/build.mjs                    build centralizado con validaciones
+  arkis_lab/servidor/ajustes.py        configuracion validada por entorno
+  arkis_lab/servidor/verificar.py      verificacion de arranque del backend
+  tests/test_seguridad.py              pruebas de clave, CORS y configuracion
+  DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt   este archivo
+
+9. ARCHIVOS MODIFICADOS
+-----------------------
+  arkis_lab/servidor/app.py   CORS, clave de escritura, errores, /docs, 404 de API, limite
+  src/lib/api.js              URL base, timeouts, clave, errores de red / no JSON
+  src/App.jsx                 campo de clave y mensaje de conexion segun el entorno
+  src/views/*.jsx             timeouts largos en operaciones sincronas lentas
+  vite.config.js              proxy /api de desarrollo (se quito el /ws obsoleto)
+  package.json                scripts de desarrollo y build; engines node >= 18
+  package-lock.json           ahora versionado (npm ci reproducible)
+  .gitignore                  .env, .vercel, .netlify; deja de ignorar package-lock.json
+  run.py                      usa `npm run dev` (Vite) en desarrollo
+  README.md, CAMBIOS.txt, docs/arkis/MANUAL-USUARIO.md   comandos actualizados
+
+10. DEPENDENCIAS AGREGADAS
+--------------------------
+  Ninguna. CORS usa el middleware que ya incluye FastAPI/Starlette. El build usa la API de
+  Vite ya instalada y solo modulos estandar de Node.
+
+11. VARIABLES DE ENTORNO
+------------------------
+  Frontend (Netlify y Vercel; se incrusta en el JS publico):
+    VITE_API_URL   origen https del backend, sin /api. Obligatoria en build:netlify y
+                   build:vercel. El build rechaza http, localhost, rutas y cualquier
+                   VITE_* con TOKEN/SECRET/KEY/PASS/CLAVE en el nombre.
+  Backend (servicio del contenedor):
+    APP_ENV         produccion (el Dockerfile ya la fija)
+    ARKIS_TOKEN     secreto, >= 16 caracteres. Generar:
+                    python -c "import secrets; print(secrets.token_urlsafe(32))"
+    CORS_ORIGINS    https://<sitio>.netlify.app,https://<sitio>.vercel.app
+    ARKIS_LAB_DATOS /datos (ruta del disco persistente)
+    PORT            8000 (o el que inyecte el host)
+  Donde se configuran:
+    Netlify: Site configuration > Environment variables (scope Builds).
+    Vercel:  Project > Settings > Environment Variables (Production y Preview).
+    Render:  se piden al crear el Blueprint (sync: false) o en Environment.
+
+12. npm run build
+-----------------
+  [1] Entorno: Node >= 18, node_modules presente, VITE_API_URL valida para la plataforma,
+      ningun secreto en VITE_*.
+  [2] Frontend con Vite.
+  [3] Validacion de dist/: index.html, sin localhost/127.0.0.1, sin .py ni .env.
+  [4] Backend: sintaxis (compileall) siempre que haya Python; verificacion completa de
+      arranque si las dependencias estan instaladas (si no, lo avisa y no finge).
+  Cualquier fallo termina con «✗ BUILD FALLIDO: <motivo>» y codigo de salida 1.
+
+13. COMANDOS
+------------
+  npm run dev              Vite (frontend) en :5173 con proxy /api -> :8000
+  npm run dev:backend      FastAPI con recarga en :8000
+  npm run dev:all          ambos (run.py; cierra los dos procesos con Ctrl+C)
+  npm run build            build centralizado (local)
+  npm run build:frontend   solo frontend
+  npm run build:backend    verificacion completa del backend (obligatoria)
+  npm run build:netlify    build para Netlify
+  npm run build:vercel     build para Vercel
+  npm run preview          previsualiza dist/
+  npm start                produccion local: un proceso sirve web y API (:8000)
+  npm test                 pytest (requirements-dev.txt)
+
+14. PROCEDIMIENTO - BACKEND (hazlo PRIMERO)
+-------------------------------------------
+  Con Render (ejemplo; cualquier host de contenedores con disco sirve):
+   1. https://dashboard.render.com > New > Blueprint > conecta el repositorio.
+      Render lee render.yaml (rama Principal; cambiala a Beta si quieres probar antes).
+   2. Introduce ARKIS_TOKEN (genera uno nuevo) y CORS_ORIGINS (puedes dejar un valor
+      provisional y corregirlo cuando tengas los dominios de Netlify/Vercel).
+   3. Crea el servicio. Plan con disco (starter): el gratuito no tiene disco persistente.
+   4. Comprueba https://<backend>.onrender.com/api/salud -> {"ok":true,...,"requiere_clave":true}
+  Otro host: docker build -t arkis-ai-lab . y ejecutar con un volumen en /datos y las
+  variables del punto 11.
+
+15. PROCEDIMIENTO - NETLIFY
+---------------------------
+   1. app.netlify.com > Add new site > Import an existing project > GitHub > el repo.
+   2. Rama a desplegar (Principal o Beta). Netlify lee netlify.toml: no cambies el comando
+      ni el directorio en el panel.
+   3. Site configuration > Environment variables > VITE_API_URL = https://<backend>
+   4. Deploy. El log debe terminar en «✓ Build completado ... (netlify)».
+   5. Añade https://<sitio>.netlify.app a CORS_ORIGINS del backend y reinicialo.
+   6. Abre el sitio: Panel debe listar los 5 modelos. Escribe la clave arriba a la derecha.
+
+16. PROCEDIMIENTO - VERCEL
+--------------------------
+   1. vercel.com > Add New > Project > Import Git Repository > el repo.
+   2. Vercel lee vercel.json (framework Vite, npm ci, npm run build:vercel, dist).
+   3. Environment Variables: VITE_API_URL = https://<backend> (Production y Preview).
+   4. Deploy. Log: «✓ Build completado ... (vercel)».
+   5. Añade https://<proyecto>.vercel.app a CORS_ORIGINS del backend.
+      Las vistas previas de Vercel usan dominios distintos en cada despliegue: para
+      probarlas añade su dominio concreto (no se admiten comodines, a proposito).
+
+17. DOMINIOS
+------------
+  Dominio propio para la web: configuralo en Netlify (Domain management) o Vercel
+  (Settings > Domains) y añadelo a CORS_ORIGINS. Dominio propio para la API (p. ej.
+  api.tudominio.com) en el host del backend y actualiza VITE_API_URL (requiere rebuild:
+  VITE_* se fija al compilar).
+
+18. API
+-------
+  Prefijo /api en todas las rutas. Lectura (GET) publica; escritura y exportacion con la
+  cabecera X-Arkis-Token. Salud: GET /api/salud. La interfaz usa solo src/lib/api.js.
+
+19. LIMITACIONES
+----------------
+  - Netlify y Vercel no ejecutan el backend (punto 2). Sin el contenedor, la web publicada
+    muestra «No hay conexion con el servidor».
+  - Una sola instancia del backend: no escala horizontalmente sin migrar el almacenamiento.
+  - Las sesiones de juego en curso se pierden si el backend se reinicia (los modelos, los
+    ejemplos y los registros no: estan en el disco).
+  - Las vistas previas de Vercel necesitan añadir su dominio a CORS_ORIGINS.
+  - La clave se guarda en el navegador del usuario: protege la escritura frente a terceros,
+    no es un sistema de usuarios.
+  - Netlify instala requirements.txt (numpy, scikit-learn) en cada build: tarda mas, pero
+    permite verificar que el backend arranca.
+
+20. PERSISTENCIA
+----------------
+  Todo lo que debe durar esta en ARKIS_LAB_DATOS (/datos en el contenedor): versiones de
+  cada modelo (con hash), ejemplos y casos (JSON con copia .bak) y SQLite de episodios,
+  sesiones y records. En Render, el disco montado en /datos sobrevive a reinicios y
+  despliegues. Sin disco, los datos se perderian: por eso no se recomienda el plan
+  gratuito. Copias: Entrenamiento > Exportar (.zip) o «Copia de seguridad».
+  No se migro ningun dato ni se cambio el sistema de almacenamiento.
+
+21. PRUEBAS EJECUTADAS (resultados reales)
+------------------------------------------
+  - pytest: 112 pasan (incluye 4 nuevas de seguridad: produccion sin clave no arranca,
+    clave obligatoria para escribir/exportar, CORS solo para el origen autorizado y
+    tambien en los 401, /api inexistente -> 404 JSON).
+  - npm run build (local): ✓ (frontend + verificacion completa del backend).
+  - npm run build:backend: ✓.
+  - build:netlify / build:vercel rechazan: sin VITE_API_URL, http, localhost, URL con
+    ruta y VITE_SECRET_KEY. Con https://arkis-api.ejemplo.dev: ✓ y la URL queda en el JS.
+  - Backend real en produccion (uvicorn, puerto local):
+      sin ARKIS_TOKEN -> no arranca (ErrorConfiguracion)
+      GET /api/salud 200 · GET /api/modelos 200
+      POST sin clave 401 · POST con clave 200 · PATCH/DELETE con errores -> 400 JSON
+      preflight desde el origen autorizado -> allow-origin correcto; origen ajeno -> sin CORS
+      /openapi.json -> no expone el esquema · /api/nada -> 404 JSON
+      /entrenamiento -> index.html · /assets/*.js -> 200 · exportar con clave -> zip
+      datos escritos en la carpeta persistente indicada
+
+22. PENDIENTES (necesitan tus cuentas o servicios externos)
+-----------------------------------------------------------
+  - Crear el servicio del backend (Render u otro) con disco persistente y la clave.
+  - Conectar el repositorio en Netlify y Vercel y definir VITE_API_URL.
+  - Completar CORS_ORIGINS con los dominios reales.
+  - Construir la imagen Docker (aqui no hay Docker) y probar la web publicada en un
+    navegador.
+
+FUENTES CONSULTADAS
+-------------------
+  Vercel, runtime de Python (FastAPI sin configuracion, 500 MB):
+    https://vercel.com/docs/functions/runtimes/python
+  Vercel, limites de funciones (duracion):
+    https://vercel.com/docs/functions/limitations
+  Netlify, versiones de Python en el build (PYTHON_VERSION):
+    https://www.netlify.com/blog/announcing-configurable-python-versions-in-netlify-builds
+  Netlify, gestion de dependencias (requirements.txt en el build):
+    https://docs.netlify.com/build/configure-builds/manage-dependencies/
+  Netlify, Python sin runtime en funciones (foro oficial):
+    https://answers.netlify.com/t/python-lambda-functions/3423

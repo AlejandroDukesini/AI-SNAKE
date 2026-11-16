@@ -108,7 +108,7 @@ segura) no aprenden y sirven de referencia. La comparación usa solo métricas d
 
 ## 7. Pruebas
 
-`python -m pytest` (108 pruebas). Por capa: motor, percepción, recompensas/evolución,
+`python -m pytest` (112 pruebas). Por capa: motor, percepción, recompensas/evolución,
 entorno/ciclos, persistencia, ARKIS, LERK, BORK, CLARK y servidor. Las pruebas de aprendizaje
 comprueban, para cada metodología, que el modelo sin entrenar no sabe jugar y que, tras entrenar con
 su propio mecanismo, su IC 95 % supera al del azar en semillas de validación.

@@ -42,12 +42,12 @@ export default function PanelLerk({ m, recargar, lanzar, ocupado, config }) {
               <Dato etiqueta="Conflictos" valor={conflictos?.length ?? '—'} />
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post('/api/lerk/inducir'), 'Inducción desde tus casos')}>Inducir reglas de mis casos</Boton>
-              <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post('/api/lerk/validar'), 'Validación')}>Validar</Boton>
+              <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post('/api/lerk/inducir', {}, 120_000), 'Inducción desde tus casos')}>Inducir reglas de mis casos</Boton>
+              <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post('/api/lerk/validar', {}, 120_000), 'Validación')}>Validar</Boton>
             </div>
             <div className="mt-2 flex items-end gap-2">
               <Campo etiqueta="Tolerancia de generalización" ayuda="Pérdida de precisión admitida al quitar condiciones"><Numero valor={tol} cambiar={setTol} min={0} max={0.2} paso={0.01} /></Campo>
-              <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post(`/api/lerk/generalizar?tolerancia=${tol}`), 'Generalización')}>Generalizar</Boton>
+              <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post(`/api/lerk/generalizar?tolerancia=${tol}`, {}, 120_000), 'Generalización')}>Generalizar</Boton>
             </div>
             <div className="mt-4 border-t border-line pt-3 space-y-2">
               <div className="text-sm font-medium">Modo automático: aprender de la experiencia</div>

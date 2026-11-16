@@ -6,7 +6,7 @@
 
 <p>
   <img alt="Estado" src="https://img.shields.io/badge/estado-en_desarrollo-f5a623?style=flat-square">
-  <img alt="Pruebas" src="https://img.shields.io/badge/pytest-108_pasan-5ad19a?style=flat-square">
+  <img alt="Pruebas" src="https://img.shields.io/badge/pytest-112_pasan-5ad19a?style=flat-square">
   <img alt="Licencia BY-NC" src="https://img.shields.io/badge/licencia-BY--NC-6e8bff?style=flat-square">
 </p>
 <p>
@@ -16,7 +16,7 @@
   <img alt="Vite" src="https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white">
 </p>
 
-**[Arquitectura](docs/arkis/ARQUITECTURA.md)** · **[Manual de uso](docs/arkis/MANUAL-USUARIO.md)** · **[Resultados](docs/arkis/RESULTADOS.md)** · **[Decisiones](docs/arkis/DECISIONES.md)** · **[Cambios](CAMBIOS.txt)**
+**[Despliegue](DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt)** · **[Arquitectura](docs/arkis/ARQUITECTURA.md)** · **[Manual de uso](docs/arkis/MANUAL-USUARIO.md)** · **[Resultados](docs/arkis/RESULTADOS.md)** · **[Decisiones](docs/arkis/DECISIONES.md)** · **[Cambios](CAMBIOS.txt)**
 
 </div>
 
@@ -57,12 +57,13 @@ Cifras medidas: [docs/arkis/RESULTADOS.md](docs/arkis/RESULTADOS.md).
 ```bash
 pip install -r requirements.txt     # numpy · scikit-learn · skops · fastapi · uvicorn
 npm install
-npm run dev                         # servidor en :8000 + interfaz en http://localhost:5173
+npm run dev:all                     # servidor en :8000 + interfaz en http://localhost:5173
 ```
 
 | Comando | Qué hace |
 | --- | --- |
-| `npm run build && npm start` | Producción: un solo proceso Python sirve la web y la API |
+| `npm run build && npm start` | Producción local: un solo proceso Python sirve la web y la API |
+| `npm run build:netlify` / `build:vercel` | Builds de despliegue ([guía](DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt)) |
 | `python -m pytest` | Todas las pruebas (`pip install -r requirements-dev.txt`) |
 | `python scripts/lineas_base.py` | Líneas base sin aprendizaje (azar y voraz) en las tres dificultades |
 | `python scripts/medir_modelos.py` | Entrena cada modelo desde cero y lo evalúa con semillas de prueba |

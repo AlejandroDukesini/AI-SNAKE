@@ -1,0 +1,26 @@
+# Blueprint de Render para el backend Python de ARKIS AI LAB (ejemplo de host persistente).
+# Render → New → Blueprint → elige este repositorio. Te pedirá los valores marcados con
+# sync: false. El disco persistente requiere un plan de pago (el plan gratuito no tiene
+# disco: los modelos se perderían en cada reinicio).
+services:
+  - type: web
+    name: arkis-ai-lab-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    branch: Principal
+    numInstances: 1            # el estado vive en memoria y en SQLite: una sola instancia
+    healthCheckPath: /api/salud
+    disk:
+      name: arkis-datos
+      mountPath: /datos
+      sizeGB: 1
+    envVars:
+      - key: APP_ENV
+        value: produccion
+      - key: ARKIS_LAB_DATOS
+        value: /datos
+      - key: ARKIS_TOKEN        # clave de escritura (mínimo 16 caracteres)
+        sync: false
+      - key: CORS_ORIGINS       # p. ej. https://arkis.netlify.app,https://arkis.vercel.app
+        sync: false

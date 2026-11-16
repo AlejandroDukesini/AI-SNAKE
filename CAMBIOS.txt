@@ -57,16 +57,16 @@ Principal (produccion) NO se ha tocado: pasa de Beta a Principal tras tus prueba
   pip install -r requirements-dev.txt      (solo para las pruebas)
   npm install
 
-  npm run dev        -> servidor en :8000 + interfaz en http://localhost:5173
+  npm run dev:all    -> servidor en :8000 + interfaz en http://localhost:5173
   npm run build
   npm start          -> produccion: un solo proceso sirve web y API en :8000
 
-  python -m pytest                     -> 108 pruebas
+  python -m pytest                     -> 112 pruebas
   python scripts/lineas_base.py        -> azar y voraz en las tres dificultades
   python scripts/medir_modelos.py      -> entrena cada modelo desde cero y lo evalua
 
   Tus modelos se guardan en laboratorio/<modelo>/ (no se sube a git).
-  Para usar otra carpeta:  ARKIS_LAB_DATOS=/ruta npm run dev
+  Para usar otra carpeta:  ARKIS_LAB_DATOS=/ruta npm run dev:all
 
 5. LIMITACIONES CONOCIDAS
 -------------------------
@@ -90,3 +90,10 @@ Principal (produccion) NO se ha tocado: pasa de Beta a Principal tras tus prueba
   docs/arkis/ARQUITECTURA.md        documentacion tecnica
   docs/arkis/MANUAL-USUARIO.md      manual de participacion del usuario
   docs/arkis/RESULTADOS.md          cifras medidas y como reproducirlas
+
+7. DESPLIEGUE (rama despliegue)
+-------------------------------
+  Netlify y Vercel publican el frontend; el backend Python corre en un contenedor con
+  disco persistente (Dockerfile, render.yaml). Clave de escritura ARKIS_TOKEN, CORS por
+  dominios, build centralizado con validaciones (npm run build). Todo el detalle, las
+  pruebas y lo que queda pendiente: DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt

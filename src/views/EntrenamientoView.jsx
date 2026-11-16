@@ -62,7 +62,7 @@ function Comun({ m, recargar, lanzar, ocupado }) {
     const archivo = e.target.files[0];
     if (!archivo) return;
     try {
-      const r = await api.post(`/api/modelos/${m.clave}/importar`, { zip_base64: await archivoABase64(archivo) });
+      const r = await api.post(`/api/modelos/${m.clave}/importar`, { zip_base64: await archivoABase64(archivo) }, 120_000);
       setMsg(`Importadas: ${r.importadas.join(', ')}.${r.bloqueado ? ' El artefacto ML importado está bloqueado hasta que confirmes que confías en su origen.' : ''}`);
       recargar();
     } catch (err) { setMsg(err.message); }
