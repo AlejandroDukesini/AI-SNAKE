@@ -1,6 +1,9 @@
-# Cerebro de la IA
+# ARKIS AI LAB
 numpy>=1.24
+scikit-learn>=1.4      # ARKIS y componente ML de CLARK (Random Forest)
+skops>=0.10            # serialización segura de modelos (sin pickle)
 
-# Servidor de la IA (WebSocket + REST)
+# Servidor del laboratorio
 fastapi>=0.110
 uvicorn[standard]>=0.27
+python-multipart>=0.0.9   # importación de modelos (subida de archivos)
