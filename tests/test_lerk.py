@@ -2,15 +2,15 @@ import random
 
 import pytest
 
-from arkis_lab.evaluacion.lineas_base import politica_azar, politica_voraz
-from arkis_lab.evaluacion.protocolo import evaluar, semillas
-from arkis_lab.modelos.lerk import aprendizaje
-from arkis_lab.modelos.lerk.conocimiento import BaseConocimiento, LerkAgente, Regla
-from arkis_lab.modelos.lerk.predicados import hechos
-from arkis_lab.modelos.lerk.servicio import ServicioLerk
-from arkis_lab.modelos.situacion import percepcion_de, situacion_de
-from arkis_lab.nucleo.entorno import Entorno
-from arkis_lab.nucleo.motor import Accion, Partida
+from ia_snake.evaluacion.lineas_base import politica_azar, politica_voraz
+from ia_snake.evaluacion.protocolo import evaluar, semillas
+from ia_snake.modelos.lerk import aprendizaje
+from ia_snake.modelos.lerk.conocimiento import BaseConocimiento, LerkAgente, Regla
+from ia_snake.modelos.lerk.predicados import hechos
+from ia_snake.modelos.lerk.servicio import ServicioLerk
+from ia_snake.modelos.situacion import percepcion_de, situacion_de
+from ia_snake.nucleo.entorno import Entorno
+from ia_snake.nucleo.motor import Accion, Partida
 
 A, B, I, D = Accion.ARRIBA, Accion.ABAJO, Accion.IZQUIERDA, Accion.DERECHA
 

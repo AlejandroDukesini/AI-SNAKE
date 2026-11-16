@@ -1,12 +1,12 @@
 <div align="center">
 
-# ARKIS AI LAB
+# IA-SNAKE
 
 **Cinco metodologías de aprendizaje resolviendo el mismo Snake.**
 
 <p>
   <img alt="Estado" src="https://img.shields.io/badge/estado-en_desarrollo-f5a623?style=flat-square">
-  <img alt="Pruebas" src="https://img.shields.io/badge/pytest-112_pasan-5ad19a?style=flat-square">
+  <img alt="Pruebas" src="https://img.shields.io/badge/pytest-118_pasan-5ad19a?style=flat-square">
   <img alt="Licencia BY-NC" src="https://img.shields.io/badge/licencia-BY--NC-6e8bff?style=flat-square">
 </p>
 <p>
@@ -16,7 +16,7 @@
   <img alt="Vite" src="https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white">
 </p>
 
-**[Despliegue](DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt)** · **[Arquitectura](docs/arkis/ARQUITECTURA.md)** · **[Manual de uso](docs/arkis/MANUAL-USUARIO.md)** · **[Resultados](docs/arkis/RESULTADOS.md)** · **[Decisiones](docs/arkis/DECISIONES.md)** · **[Cambios](CAMBIOS.txt)**
+**[Despliegue](DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt)** · **[Arquitectura](docs/ia-snake/ARQUITECTURA.md)** · **[Manual de uso](docs/ia-snake/MANUAL-USUARIO.md)** · **[Resultados](docs/ia-snake/RESULTADOS.md)** · **[Decisiones](docs/ia-snake/DECISIONES.md)** · **[Cambios](CAMBIOS.txt)**
 
 </div>
 
@@ -45,10 +45,12 @@ cambia con evidencia registrada.
 | ✅ **Motor** | Tableros 4×4, 8×8 y 16×16; tres sentidos; recompensa por componentes; ciclos y regla de 30 s en tiempo de juego; E0–E8. E8 demostrado alcanzable en los tres tableros. |
 | ✅ **ARKIS, LERK, BORK, CLARK** | Implementados, con pruebas que demuestran que cada uno pasa de no saber a superar al azar con su propia metodología. |
 | ✅ **Laboratorio** | Interfaz con panel, simulador, percepción, un panel de entrenamiento distinto por modelo, evolución y comparación. Persistencia versionada por modelo. |
+| ✅ **Entrenamiento en vivo** | Mientras un modelo entrena o se evalúa, se ve jugar: cada movimiento es su decisión real, con su explicación, resultado, recompensa (si aplica) y comparación entre episodios. Pausa, reanudación, parada y ritmo ajustable sin alterar lo aprendido (probado). |
+| ✅ **Etiquetado guiado de ARKIS** | Cinco pasos explicados: observar, elegir la acción, guardar, revisar y entrenar. |
 | ⏳ **MABU** | Pendiente: Etapa 5. |
-| 🔬 **Pendiente de verificar por el director** | Las pruebas de uso de la interfaz: la web compila y el servidor se probó de extremo a extremo, pero la interfaz no se ha revisado visualmente en un navegador. |
+| 🔬 **Pendiente de verificar por el director** | Las pruebas de uso. La interfaz se revisó con capturas de Chrome/Edge headless a 1920×1080, 1366×768 y 390 px (emulación de móvil). |
 
-Cifras medidas: [docs/arkis/RESULTADOS.md](docs/arkis/RESULTADOS.md).
+Cifras medidas: [docs/ia-snake/RESULTADOS.md](docs/ia-snake/RESULTADOS.md).
 
 ## Uso
 
@@ -73,7 +75,7 @@ Los datos de tus modelos se guardan en `laboratorio/` (no se versiona en git).
 ## Estructura
 
 ```
-arkis_lab/
+ia_snake/
   nucleo/        motor, percepción, recompensas, ciclos, reloj, evolución, entorno
   modelos/       arkis · lerk · bork · clark (+ interfaz común, ejemplos, simetrías)
   persistencia/  versiones con SHA-256, SQLite de episodios, skops sin pickle
@@ -82,7 +84,7 @@ arkis_lab/
 src/             interfaz React (solo dibuja)
 tests/           pruebas por capa e integración
 scripts/         mediciones reproducibles
-docs/arkis/      análisis, decisiones, arquitectura, manual, resultados
+docs/ia-snake/      análisis, decisiones, arquitectura, manual, resultados
 ```
 
 La versión anterior del proyecto (neuroevolución) se conserva en la etiqueta git `v2-neuroevolucion`.

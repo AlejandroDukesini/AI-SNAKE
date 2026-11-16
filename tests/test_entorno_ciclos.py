@@ -3,13 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from arkis_lab.evaluacion.lineas_base import politica_azar, politica_voraz
-from arkis_lab.evaluacion.protocolo import estadistico, evaluar, semillas
-from arkis_lab.nucleo.ciclos import (CONFIGURACION_REPETIDA, ConfigCiclos, DetectorCiclos)
-from arkis_lab.nucleo.config import DIFICULTADES
-from arkis_lab.nucleo.entorno import ConfigEntorno, Entorno
-from arkis_lab.nucleo.motor import ACCIONES, CICLO, Accion, Partida
-from arkis_lab.nucleo.reloj import RelojSesion, RelojSimulacion
+from ia_snake.evaluacion.lineas_base import politica_azar, politica_voraz
+from ia_snake.evaluacion.protocolo import estadistico, evaluar, semillas
+from ia_snake.nucleo.ciclos import (CONFIGURACION_REPETIDA, ConfigCiclos, DetectorCiclos)
+from ia_snake.nucleo.config import DIFICULTADES
+from ia_snake.nucleo.entorno import ConfigEntorno, Entorno
+from ia_snake.nucleo.motor import ACCIONES, CICLO, Accion, Partida
+from ia_snake.nucleo.reloj import RelojSesion, RelojSimulacion
 
 A, B, I, D = Accion.ARRIBA, Accion.ABAJO, Accion.IZQUIERDA, Accion.DERECHA
 
@@ -150,7 +150,7 @@ def test_estadistico():
 
 
 def test_el_nucleo_no_depende_de_modelos_ni_servidor():
-    raiz = Path(__file__).resolve().parent.parent / "arkis_lab" / "nucleo"
+    raiz = Path(__file__).resolve().parent.parent / "ia_snake" / "nucleo"
     prohibidos = ("modelos", "servidor", "persistencia", "evaluacion", "entrenamiento")
     for f in raiz.glob("*.py"):
         for nodo in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
@@ -160,4 +160,4 @@ def test_el_nucleo_no_depende_de_modelos_ni_servidor():
                 assert nodo.level <= 1, f"{f.name} sale del núcleo: {nodo.module}"
             if isinstance(nodo, ast.Import):
                 for n in nodo.names:
-                    assert not n.name.startswith("arkis_lab."), f"{f.name}: {n.name}"
+                    assert not n.name.startswith("ia_snake."), f"{f.name}: {n.name}"

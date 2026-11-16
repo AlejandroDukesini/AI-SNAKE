@@ -2,11 +2,12 @@
 import { useState } from 'react';
 import { DIFICULTADES, api, fmt, pct } from '../../lib/api';
 import { useDatos } from '../../lib/hooks';
+import { Distribucion } from '../../components/Distribucion';
 import { Aviso, Boton, Campo, Dato, Insignia, Nota, Numero, Panel, Selector, Vacio } from '../../components/ui';
 
 const ORIGEN = { usuario: 'tuya', induccion: 'inducida', correccion: 'corrección', experiencia: 'experiencia', generalizacion: 'generalizada' };
 
-export default function PanelLerk({ m, recargar, lanzar, ocupado, config }) {
+export default function PanelLerk({ m, recargar, lanzar, ocupado, config, visor }) {
   const e = m.entrenamiento;
   const [informe, setInforme] = useState(null);
   const [error, setError] = useState(null);
@@ -23,9 +24,41 @@ export default function PanelLerk({ m, recargar, lanzar, ocupado, config }) {
   const raices = e.reglas.filter((r) => !r.padre);
   const hijos = (id) => e.reglas.filter((r) => r.padre === id);
 
+  const controles = (
+    <>
+          <Panel titulo="Aprendizaje simbólico">
+        <div className="grid grid-cols-3 gap-2">
+          <Dato etiqueta="Casos tuyos" valor={e.casos.aprobados} />
+          <Dato etiqueta="Experiencia" valor={fmt(e.experiencia, 0)} ayuda="Pasos con resultado objetivo del simulador" />
+          <Dato etiqueta="Conflictos" valor={conflictos?.length ?? '—'} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post('/api/lerk/inducir', {}, 120_000), 'Inducción desde tus casos')}>Inducir reglas de mis casos</Boton>
+          <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post('/api/lerk/validar', {}, 120_000), 'Validación')}>Validar</Boton>
+        </div>
+        <div className="mt-2 flex items-end gap-2">
+          <Campo etiqueta="Tolerancia de generalización" ayuda="Pérdida de precisión admitida al quitar condiciones"><Numero valor={tol} cambiar={setTol} min={0} max={0.2} paso={0.01} /></Campo>
+          <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post(`/api/lerk/generalizar?tolerancia=${tol}`, {}, 120_000), 'Generalización')}>Generalizar</Boton>
+        </div>
+        <div className="mt-4 border-t border-line pt-3 space-y-2">
+          <div className="text-sm font-medium">Modo automático: aprender de la experiencia</div>
+          <Nota>LERK juega; el simulador aporta los hechos objetivos (morir en ≤ 4 pasos, comer, acercarse y sobrevivir) y de ellos se inducen prohibiciones y preferencias. Tus reglas y correcciones no se tocan.</Nota>
+          <div className="grid grid-cols-3 gap-2">
+            <Campo etiqueta="Dificultad"><Selector valor={dif} cambiar={setDif} opciones={DIFICULTADES} /></Campo>
+            <Campo etiqueta="Episodios"><Numero valor={episodios} cambiar={setEpisodios} min={10} /></Campo>
+            <Campo etiqueta="ε (exploración)"><Numero valor={epsilon} cambiar={setEpsilon} min={0} max={1} paso={0.05} /></Campo>
+          </div>
+          <Boton variante="primario" disabled={ocupado} onClick={() => lanzar('automatico', { dificultad: dif, episodios, epsilon, bloque: 10 })}>Aprender jugando</Boton>
+        </div>
+        <Aviso error={error} />
+      </Panel>
+      {informe && <Informe informe={informe} />}
+    </>
+  );
+
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+    <Distribucion visor={visor} controles={controles}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] items-start">
         <Panel titulo={`Conocimiento adquirido (${e.reglas.length} reglas)`}>
           <div className="flex flex-wrap gap-1 mb-2">{Object.entries(e.por_origen).map(([k, v]) => <Insignia key={k}>{ORIGEN[k] || k}: {v}</Insignia>)}</div>
           {raices.length === 0 && <Vacio>LERK empieza vacío. Crea reglas, aporta casos (Simulador → Demostrar con LERK) o déjalo aprender de la experiencia.</Vacio>}
@@ -33,37 +66,8 @@ export default function PanelLerk({ m, recargar, lanzar, ocupado, config }) {
             {raices.map((r) => <Regla key={r.id} r={r} hijos={hijos} hacer={hacer} />)}
           </div>
         </Panel>
-        <div className="space-y-4">
-          <NuevaRegla config={config} reglas={e.reglas} hacer={hacer} />
-          <Panel titulo="Aprendizaje simbólico">
-            <div className="grid grid-cols-3 gap-2">
-              <Dato etiqueta="Casos tuyos" valor={e.casos.aprobados} />
-              <Dato etiqueta="Experiencia" valor={fmt(e.experiencia, 0)} ayuda="Pasos con resultado objetivo del simulador" />
-              <Dato etiqueta="Conflictos" valor={conflictos?.length ?? '—'} />
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post('/api/lerk/inducir', {}, 120_000), 'Inducción desde tus casos')}>Inducir reglas de mis casos</Boton>
-              <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post('/api/lerk/validar', {}, 120_000), 'Validación')}>Validar</Boton>
-            </div>
-            <div className="mt-2 flex items-end gap-2">
-              <Campo etiqueta="Tolerancia de generalización" ayuda="Pérdida de precisión admitida al quitar condiciones"><Numero valor={tol} cambiar={setTol} min={0} max={0.2} paso={0.01} /></Campo>
-              <Boton disabled={!e.casos.aprobados} onClick={() => hacer(() => api.post(`/api/lerk/generalizar?tolerancia=${tol}`, {}, 120_000), 'Generalización')}>Generalizar</Boton>
-            </div>
-            <div className="mt-4 border-t border-line pt-3 space-y-2">
-              <div className="text-sm font-medium">Modo automático: aprender de la experiencia</div>
-              <Nota>LERK juega; el simulador aporta los hechos objetivos (morir en ≤ 4 pasos, comer, acercarse y sobrevivir) y de ellos se inducen prohibiciones y preferencias. Tus reglas y correcciones no se tocan.</Nota>
-              <div className="grid grid-cols-3 gap-2">
-                <Campo etiqueta="Dificultad"><Selector valor={dif} cambiar={setDif} opciones={DIFICULTADES} /></Campo>
-                <Campo etiqueta="Episodios"><Numero valor={episodios} cambiar={setEpisodios} min={10} /></Campo>
-                <Campo etiqueta="ε (exploración)"><Numero valor={epsilon} cambiar={setEpsilon} min={0} max={1} paso={0.05} /></Campo>
-              </div>
-              <Boton variante="primario" disabled={ocupado} onClick={() => lanzar('automatico', { dificultad: dif, episodios, epsilon, bloque: 10 })}>Aprender jugando</Boton>
-            </div>
-            <Aviso error={error} />
-          </Panel>
-        </div>
+        <NuevaRegla config={config} reglas={e.reglas} hacer={hacer} />
       </div>
-      {informe && <Informe informe={informe} />}
       {conflictos?.length > 0 && (
         <Panel titulo="Conflictos detectados en tus casos">
           <table className="tabla"><thead><tr><th>Tipo</th><th>Reglas</th><th className="num">Casos</th></tr></thead>
@@ -71,7 +75,7 @@ export default function PanelLerk({ m, recargar, lanzar, ocupado, config }) {
         </Panel>
       )}
       <Nota>Para corregir una inferencia: Simulador → Observar a LERK → «¿No estás de acuerdo?». La corrección crea una excepción (Ripple-Down Rules) a la regla responsable.</Nota>
-    </div>
+    </Distribucion>
   );
 }
 

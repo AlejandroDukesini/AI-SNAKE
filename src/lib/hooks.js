@@ -33,10 +33,11 @@ export function useTrabajo(alTerminar) {
 }
 
 /* Preferencia local de la interfaz (tema, pestaña). Nunca datos de los modelos. */
-export function usePreferencia(clave, inicial) {
+export function usePreferencia(clave, inicial, forzado) {
   const [v, setV] = useState(() => {
-    try { const g = localStorage.getItem(`arkis:${clave}`); return g === null ? inicial : JSON.parse(g); } catch { return inicial; }
+    if (forzado !== undefined && forzado !== null) return forzado;   // p. ej. la URL manda
+    try { const g = localStorage.getItem(`ia-snake:${clave}`); return g === null ? inicial : JSON.parse(g); } catch { return inicial; }
   });
-  useEffect(() => { try { localStorage.setItem(`arkis:${clave}`, JSON.stringify(v)); } catch { /* sin almacenamiento */ } }, [clave, v]);
+  useEffect(() => { try { localStorage.setItem(`ia-snake:${clave}`, JSON.stringify(v)); } catch { /* sin almacenamiento */ } }, [clave, v]);
   return [v, setV];
 }

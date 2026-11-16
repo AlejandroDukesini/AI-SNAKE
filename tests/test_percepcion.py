@@ -3,8 +3,8 @@ import random
 import numpy as np
 import pytest
 
-from arkis_lab.nucleo.motor import ACCIONES, Accion, Partida
-from arkis_lab.nucleo.percepcion import percibir, verificar_sincronia
+from ia_snake.nucleo.motor import ACCIONES, Accion, Partida
+from ia_snake.nucleo.percepcion import percibir, verificar_sincronia
 
 A, B, I, D = Accion.ARRIBA, Accion.ABAJO, Accion.IZQUIERDA, Accion.DERECHA
 

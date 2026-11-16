@@ -1,4 +1,4 @@
-# Netlify publica el FRONTEND de ARKIS AI LAB.
+# Netlify publica el FRONTEND de IA-SNAKE.
 # Netlify no ofrece runtime de Python en producción (sus funciones son JavaScript/TypeScript
 # y Go), así que el backend Python se ejecuta en su propio servicio (Dockerfile) y la web lo
 # llama en VITE_API_URL. Ver DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt.

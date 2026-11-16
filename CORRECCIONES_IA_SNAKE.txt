@@ -1,0 +1,187 @@
+IA-SNAKE - CORRECCIONES FUNCIONALES Y VISUALES
+==============================================
+Fecha: 2026-11-16 · Rama: correcciones -> Beta
+
+1. PROBLEMAS ENCONTRADOS (tras inspeccionar el código)
+------------------------------------------------------
+  1.1 El entrenamiento no se podía ver: los bucles de LERK, BORK y CLARK y la evaluación
+      (lo que se ve de ARKIS) solo informaban un resumen al terminar cada episodio. La
+      interfaz recibía contadores, nunca pasos ni decisiones. No faltaba un componente
+      visual: faltaba un canal de datos reales.
+  1.2 Tablero demasiado grande: en el Simulador ocupaba hasta 560 px con los controles
+      encima, así que los botones quedaban fuera de la pantalla. En ARKIS, la actividad
+      principal (etiquetar) estaba bajo el pliegue.
+  1.3 Las etiquetas de ARKIS no se explicaban: eran botones de flecha sin contexto, el
+      concepto de «aprobado» no se entendía y no había un flujo para crearlas.
+  1.4 Nombre: «ARKIS AI LAB» (título de la especificación) se usaba como nombre del
+      proyecto en el banner de run.py, la API, el título del navegador, la cabecera, el
+      package.json, la documentación, el paquete Python (arkis_lab), las variables de
+      entorno (ARKIS_TOKEN, ARKIS_LAB_DATOS) y la cabecera HTTP X-Arkis-Token.
+  1.5 Encontrados durante la validación (también corregidos):
+      - En móvil (390 px) las tablas y la cuadrícula del visor desbordaban en horizontal.
+      - La navegación por URL fallaba en desarrollo: React StrictMode ejecuta los efectos
+        dos veces y la pestaña guardada pisaba a la de la URL.
+      - Con la web compilada, una ruta /api inexistente devolvía la página HTML.
+
+  Aclaración: el tablero difícil es 16×16, no 15×15, por la decisión D0 (tablero par para
+  que E8 sea demostrable). Las dimensiones lógicas no se tocaron; los cambios de tamaño son
+  solo visuales.
+
+2. CAMBIOS REALIZADOS Y FUNCIONALIDADES
+---------------------------------------
+  2.1 Visualización del entrenamiento real
+    - ia_snake/modelos/observacion.py (nuevo): Observador. Los bucles reales le pasan, en
+      cada paso, la decisión efectiva del modelo y la transición que devolvió el motor. Guarda
+      solo el último fotograma (sin cola) y el historial de episodios. Pausa y ritmo
+      (pasos/s) que SOLO añaden esperas: no tocan el RNG ni los cálculos.
+    - Ganchos en los bucles reales, sin cambiar el orden de consumo del RNG:
+        BORK  (bork/qlearning.py): estado, modo exploración/explotación, ε, Q antes y
+              después de la actualización, objetivo y error TD, visitas.
+        LERK  (lerk/servicio.py): cadena de inferencia (hechos, reglas disparadas,
+              conflictos) o exploración ε; tras cada bloque, las reglas nuevas aprendidas,
+              con fracasos y progresos usados.
+        CLARK (clark/servicio.py): opinión de los 3 componentes, vetos, integración, acuerdo
+              con la decisión final y, para diferenciar su rendimiento con datos reales, la
+              acción favorita de cada componente y si habría chocado según el motor
+              (acumulado por episodio).
+        ARKIS (evaluación + arkis/servicio.py): probabilidades y decisión por paso; ejemplos
+              usados, distribución de etiquetas, métricas y su evolución por versión.
+              ARKIS no aprende jugando: «Entrenar y jugar» ajusta el Random Forest con tus
+              ejemplos revisados y luego juega partidas de evaluación observables.
+    - evaluacion/protocolo.py: jugar_episodio_observado, idéntico a jugar_episodio.
+    - Servidor: GET /api/trabajos/{id}/vista y POST /api/trabajos/{id}/control
+      (pausar | reanudar | detener | pasos_por_segundo).
+    - src/components/VisorEntrenamiento.jsx (nuevo): tablero; acción y si se acerca, se
+      aleja, come o choca (con la distancia antes→después); manzanas, longitud, ocupación,
+      pasos, nivel E; recompensa del paso y del episodio solo en BORK/CLARK (ARKIS y LERK
+      no usan recompensas y se dice); explicación según la metodología; comparación entre
+      episodios (gráfica, media de los primeros frente a los últimos, mejor episodio,
+      colisiones, tabla). Ritmo del entrenamiento y refresco de pantalla independientes;
+      nunca dos peticiones a la vez.
+    - MABU: sigue pendiente (Etapa 5). El panel lo dice; no se simula nada.
+
+  2.2 Distribución equilibrada
+    - src/components/Distribucion.jsx (nuevo): visor + controles del modelo lado a lado en
+      pantallas anchas y apilados en las estrechas; información y resultados debajo.
+      Aplicado a ARKIS, LERK, BORK y CLARK.
+    - Tableros limitados por la altura de la pantalla: visor ≤ min(300 px, 42vh),
+      etiquetado ≤ min(280 px, 40vh), simulador ≤ min(560 px, 60vh). Casillas cuadradas.
+    - Simulador: controles de sesión en la columna lateral; sin partida, tablero vacío
+      rotulado «sin partida».
+    - Móvil: paneles y celdas de cuadrícula que pueden encogerse, tablas con scroll propio,
+      navegación que se reparte en líneas.
+    - Navegación por URL (#/entrenamiento/arkis…): recargar conserva la pestaña.
+
+  2.3 Etiquetas de ARKIS
+    - Explicación para principiantes: qué es una etiqueta, por qué la necesita ARKIS, qué
+      contiene un ejemplo y en qué se diferencia de una recompensa.
+    - Flujo guiado en la pestaña «Etiquetar»:
+        Paso 1: situación (cabeza, cuerpo, cola, manzana con dirección y distancia,
+                dirección actual) y, por acción, si choca con el límite o con el cuerpo,
+                si se acerca y cuántas casillas quedan alcanzables.
+        Paso 2: las 4 acciones reales del motor; el giro de 180° aparece deshabilitado.
+        Paso 3: «Guardar ejemplo y mover», «Mover sin guardar» y la opción de marcarlo
+                como revisado. Confirma el id del ejemplo guardado.
+        Paso 4: revisión con estado, acción asignada, id y fecha, editar, revisar o quitar
+                la revisión y eliminar (papelera recuperable); se marcan los ejemplos que
+                ARKIS falló.
+        Paso 5: cuántos ejemplos hay, cuántos se usarán y resultados en lenguaje claro.
+    - «Ver qué haría ARKIS ahora» es opcional y se rotula «solo para comparar; no es una
+      etiqueta». Las etiquetas siguen siendo siempre del usuario.
+    - Servidor: el paso de una demostración acepta guardar (bool) y aprobar (bool) y
+      devuelve el ejemplo creado.
+
+  2.4 Nombre del proyecto: IA-SNAKE (decisión D6 en docs/ia-snake/DECISIONES.md)
+    - Terminal (banner de run.py), título del navegador, cabecera, título de la API,
+      package.json (ia-snake), pyproject, README y documentación.
+    - Paquete arkis_lab → ia_snake; ARKIS_TOKEN → IA_SNAKE_TOKEN;
+      ARKIS_LAB_DATOS → IA_SNAKE_DATOS; X-Arkis-Token → X-IA-Snake-Token;
+      docs/arkis → docs/ia-snake; claves locales del navegador ia-snake:*.
+    - El MODELO ARKIS no se renombró (modelos/arkis, ServicioArkis, /api/arkis, panel).
+    - Nota: la carpeta de datos sigue siendo laboratorio/ (tus modelos no se movieron).
+      Como cambió la clave del navegador, el tema y la pestaña vuelven a sus valores por
+      defecto una vez.
+
+3. ARCHIVOS
+-----------
+  Nuevos:
+    ia_snake/modelos/observacion.py, src/components/VisorEntrenamiento.jsx,
+    src/components/Distribucion.jsx, tests/test_observacion.py, CORRECCIONES_IA_SNAKE.txt
+  Modificados:
+    ia_snake/modelos/{servicio.py, arkis/servicio.py, lerk/servicio.py, bork/qlearning.py,
+      bork/servicio.py, clark/servicio.py}, ia_snake/evaluacion/protocolo.py,
+    ia_snake/servidor/{app.py, trabajos.py, sesiones.py},
+    src/App.jsx, src/lib/hooks.js, src/index.css, src/components/ui.jsx,
+    src/views/{EntrenamientoView.jsx, SimuladorView.jsx, DocsView.jsx},
+    src/views/entrenamiento/{PanelArkis.jsx, PanelLerk.jsx, PanelBork.jsx, PanelClark.jsx},
+    README.md, CAMBIOS.txt, docs/ia-snake/{DECISIONES.md, ARQUITECTURA.md, MANUAL-USUARIO.md}
+  Renombrados: arkis_lab/ → ia_snake/, docs/arkis/ → docs/ia-snake/ (y referencias en
+    package.json, run.py, Dockerfile, render.yaml, .env.example, scripts y pruebas).
+  Ninguna arquitectura de IA cambió. Ninguna funcionalidad ni endpoint se eliminó.
+
+4. PRUEBAS EJECUTADAS Y RESULTADOS
+----------------------------------
+  [1] pytest: 118 pasan (las 112 anteriores + 6 nuevas de observación):
+      - observar y frenar el entrenamiento NO cambia el resultado: la tabla Q de BORK
+        queda idéntica con observador al máximo, con ritmo limitado y sin observador;
+      - los fotogramas de BORK son las decisiones reales (acción = transición, Q antes y
+        después);
+      - LERK expone su cadena de inferencia y sus aprendizajes; CLARK, sus 3 componentes
+        y sus choques evitables;
+      - una evaluación observada da exactamente las mismas manzanas que sin observar;
+      - en pausa el entrenamiento no avanza y al reanudar continúa;
+      - las rutas /vista y /control funcionan y rechazan acciones inválidas.
+  [2] npm run dev:all arranca correctamente (Vite :5173 + servidor :8000).
+  [3] Nombre mostrado: «IA-SNAKE» en el banner de la terminal, en <title>, en la cabecera
+      y en el título de la API.
+  [4] Cuadrícula durante el entrenamiento (capturas con Chrome/Edge headless):
+      1920×1080 y 1366×768: visor y controles visibles a la vez, sin tapar etiquetas ni
+      botones. 390 px (emulación de móvil vía DevTools): ancho del documento = 390 en
+      las tres vistas probadas (sin desbordamiento) y todo apilado.
+      Nota: con --window-size=390 Edge/Chrome usan una ventana mínima de 502 px y solo
+      recortan la captura; por eso la prueba de móvil se hizo con emulación de dispositivo.
+  [5] Ejemplos etiquetados (con las mismas llamadas que el flujo guiado, en una carpeta de
+      datos temporal): 134 ejemplos en 3 partidas, todos guardados y revisados;
+      «mover sin guardar» no crea ejemplos; editar deja el ejemplo sin revisar; una
+      edición a una acción no disponible se rechaza (400); eliminar lo envía a la
+      papelera.
+  [6] Entrenamiento de ARKIS con esos ejemplos: 131 ejemplos revisados de 3 partidas,
+      90,8 % de acierto en las partidas reservadas (validación por partida).
+  [7] Lo visualizado = las decisiones reales: en «Entrenar y jugar» a 3 pasos/s, para 12
+      pares de fotogramas consecutivos se pidió a ARKIS por separado una predicción sobre
+      el estado anterior: 12/12 coinciden con la acción del visor y con la ejecutada.
+  [8] Los demás modelos conservan su metodología: todas las pruebas de ARKIS, LERK, BORK
+      y CLARK pasan sin cambios (aprenden desde cero y superan al azar).
+  [9] Funcionalidades: los 118 tests cubren los endpoints anteriores; ninguno se eliminó.
+      npm run build completo: ✓ (45 rutas /api; antes 43, se añadieron /vista y /control).
+  [10] Resoluciones: 1920×1080, 1366×768 y 390 px (ver [4]).
+
+5. PROBLEMAS PENDIENTES
+-----------------------
+  - Mientras BORK o CLARK entrenan, el servicio está ocupado durante cada episodio. Con un
+    ritmo lento, guardar su configuración o corregir a CLARK espera a que termine el
+    episodio en curso. Restaurar versiones ya estaba bloqueado durante un trabajo.
+  - Al ritmo «Máximo» el visor muestra pasos sueltos (el último en cada refresco): es lo
+    esperable. Para seguir cada movimiento hay que bajar el ritmo.
+  - El modelo muestra «Sin entrenar» hasta que termina su primera sesión (la versión se
+    guarda al final); mientras tanto la cabecera indica «Trabajando».
+  - El entrenamiento de ARKIS (ajuste del Random Forest) no tiene pasos de juego: el visor
+    muestra la fase «Ajustando el modelo» y luego las partidas de evaluación.
+  - MABU sigue pendiente (Etapa 5).
+  - Las pruebas de uso final quedan para el director.
+
+6. CÓMO EJECUTAR Y PROBAR
+-------------------------
+  pip install -r requirements.txt  ·  pip install -r requirements-dev.txt  ·  npm install
+  npm run dev:all                       → http://localhost:5173
+  python -m pytest                      → 118 pruebas
+  npm run build                         → build y verificación completa
+
+  Probar el visor:     Entrenamiento → BORK → ritmo 15/s → «Iniciar entrenamiento».
+                       Pausa, reanuda, cambia el ritmo y detén.
+  Probar ARKIS:        Entrenamiento → ARKIS → «Etiquetar» → «Empezar a etiquetar», crea
+                       ejemplos en 2 o más partidas → «Entrenar» → «Entrenar y jugar».
+  Probar CLARK:        Entrenamiento → CLARK → «Iniciar entrenamiento»: en el visor, la
+                       tabla «Qué habría hecho cada componente por separado».
+  Datos de prueba sin tocar los tuyos:
+                       IA_SNAKE_DATOS=/otra/carpeta npm run dev:all

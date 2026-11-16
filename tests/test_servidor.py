@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture()
 def cliente(tmp_path, monkeypatch):
-    monkeypatch.setenv("ARKIS_LAB_DATOS", str(tmp_path))
-    import arkis_lab.servidor.app as m
+    monkeypatch.setenv("IA_SNAKE_DATOS", str(tmp_path))
+    import ia_snake.servidor.app as m
     m = importlib.reload(m)
     return TestClient(m.app)
 

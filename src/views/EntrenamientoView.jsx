@@ -1,10 +1,11 @@
 /* Entrenamiento: un panel propio por modelo (su metodología) + sección común de
    evaluación, versiones y persistencia. */
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { DIFICULTADES, api, archivoABase64, descargar, fmt } from '../lib/api';
-import { useDatos, useTrabajo } from '../lib/hooks';
-import { Aviso, Boton, Campo, InsigniaEstado, Nota, Numero, Panel, Plegable, Progreso, Segmentado, Selector } from '../components/ui';
+import { useDatos, usePreferencia, useTrabajo } from '../lib/hooks';
+import { Aviso, Boton, Campo, Insignia, InsigniaEstado, Nota, Numero, Panel, Plegable, Progreso, Segmentado, Selector } from '../components/ui';
 import Grafica, { mediaMovil } from '../components/Grafica';
+import VisorEntrenamiento, { RITMOS } from '../components/VisorEntrenamiento';
 import PanelArkis from './entrenamiento/PanelArkis';
 import PanelLerk from './entrenamiento/PanelLerk';
 import PanelBork from './entrenamiento/PanelBork';
@@ -17,21 +18,39 @@ export default function EntrenamientoView({ modelo, setModelo, tema, config }) {
   const [m, recargar] = useDatos(modelo === 'mabu' ? null : `/api/modelos/${modelo}`, [modelo]);
   const [trabajo, setTrabajo] = useTrabajo(() => recargar());
   const [error, setError] = useState(null);
+  const [ritmo, setRitmo] = usePreferencia('ent:ritmo', '50');
 
   const lanzar = async (tipo, parametros) => {
     setError(null);
-    try { setTrabajo(await api.post(`/api/modelos/${modelo}/trabajos`, { tipo, parametros })); } catch (e) { setError(e.message); }
+    try {
+      setTrabajo(await api.post(`/api/modelos/${modelo}/trabajos`, { tipo, parametros: { ...parametros, pasos_por_segundo: Number(ritmo) } }));
+    } catch (e) { setError(e.message); }
   };
   const cancelar = () => trabajo && api.post(`/api/trabajos/${trabajo.id}/cancelar`);
   const PanelModelo = PANELES[modelo];
   const actual = trabajo?.modelo === modelo ? trabajo : m?.trabajo;
+  const alTerminar = useCallback(() => recargar(), [recargar]);
+
+  const visor = actual?.observable ? (
+    <VisorEntrenamiento key={actual.id} trabajoId={actual.id} modelo={modelo} tema={tema} alTerminar={alTerminar} />
+  ) : (
+    <div className="space-y-3">
+      {actual && <Progreso trabajo={actual} cancelar={cancelar} />}
+      <Nota>Aquí verás al modelo jugando mientras entrena o se evalúa: cada movimiento es una decisión real, con su explicación, su resultado y la comparación entre episodios.</Nota>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted" title="Solo añade esperas entre pasos: el resultado del entrenamiento es el mismo">Ritmo con el que se mostrará el próximo entrenamiento</span>
+        <Segmentado opciones={RITMOS} valor={String(ritmo)} cambiar={setRitmo} />
+      </div>
+      <Nota>Podrás cambiarlo, pausar o detener mientras corre. Ir más lento no cambia lo que aprende el modelo: solo espera entre pasos.</Nota>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
       <Segmentado opciones={MODELOS} valor={modelo} cambiar={setModelo} />
       {modelo === 'mabu' && (
         <Panel titulo="MABU · pendiente">
-          <Nota>MABU es el modelo experimental principal. Según la especificación, su arquitectura se presentará para tu aprobación en la Etapa 5, y su preentrenamiento real y verificable se hará al final (decisión D4). Todavía no existe ningún artefacto de MABU, y la interfaz no simula uno.</Nota>
+          <Nota>MABU es el modelo experimental principal. Según la especificación, su arquitectura se presentará para tu aprobación en la Etapa 5, y su preentrenamiento real y verificable se hará al final (decisión D4). Todavía no existe ningún artefacto de MABU, y la interfaz no simula uno: cuando exista, este panel mostrará qué componente interviene en cada decisión, igual que el de CLARK.</Nota>
         </Panel>
       )}
       {m && PanelModelo && (
@@ -39,11 +58,11 @@ export default function EntrenamientoView({ modelo, setModelo, tema, config }) {
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-xl font-semibold">{m.nombre}</div>
             <InsigniaEstado estado={m.estado} />
-            <span className="text-sm text-muted">{m.metodologia} · versión {m.version || '—'}</span>
+            {actual?.estado === 'en_curso' && <Insignia tono="acento">Trabajando: {actual.tipo}</Insignia>}
+            <span className="text-sm text-muted">{m.metodologia} · versión {m.version || '—'}{actual?.estado === 'en_curso' ? ' (se guardará una versión nueva al terminar)' : ''}</span>
           </div>
           <Aviso error={error} />
-          <Progreso trabajo={actual} cancelar={cancelar} />
-          <PanelModelo m={m} recargar={recargar} lanzar={lanzar} ocupado={actual?.estado === 'en_curso'} tema={tema} config={config} />
+          <PanelModelo m={m} recargar={recargar} lanzar={lanzar} ocupado={actual?.estado === 'en_curso'} tema={tema} config={config} visor={visor} hayTrabajo={!!actual?.observable} />
           <Comun m={m} recargar={recargar} lanzar={lanzar} ocupado={actual?.estado === 'en_curso'} />
         </>
       )}

@@ -95,30 +95,17 @@ export default function SimuladorView({ config, tema, modelo, setModelo }) {
 
   const p = f?.partida;
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start">
       <div className="space-y-4">
-        <Panel titulo="Sesión">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Campo etiqueta="Modo"><Selector valor={modo} cambiar={setModo} opciones={MODOS} /></Campo>
-            {modo !== 'jugar' && <Campo etiqueta="Modelo"><Selector valor={modelo} cambiar={setModelo} opciones={modo === 'demostrar' ? { arkis: 'ARKIS (ejemplos)', lerk: 'LERK (casos)' } : MODELOS} /></Campo>}
-            <Campo etiqueta="Dificultad"><Selector valor={dificultad} cambiar={setDificultad} opciones={DIFICULTADES} /></Campo>
-            <Campo etiqueta="Velocidad del juego (mov/s)" ayuda="Define el tiempo de juego: la regla de 30 s equivale a 30 × esta velocidad en pasos."><Numero valor={velocidad} cambiar={setVelocidad} min={1} max={60} /></Campo>
-            <Campo etiqueta="Semilla (vacía = aleatoria)"><Numero valor={semilla} cambiar={setSemilla} min={0} /></Campo>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2 items-center">
-            <Boton variante="primario" onClick={nueva} disabled={!destinoValido}>Nueva partida</Boton>
-            {f?.modo === 'observar' && <>
-              <Boton onClick={() => setCorriendo(!corriendo)} disabled={f.terminada || f.pausada}>{corriendo ? 'Detener' : 'Reproducir'}</Boton>
-              <Boton onClick={() => paso(null)} disabled={f.terminada || corriendo}>Un paso</Boton>
-              <Segmentado opciones={ACELERACION} valor={String(acel)} cambiar={setAcel} />
-            </>}
-            {f && <Boton onClick={() => pausar(!f.pausada)} disabled={f.terminada}>{f.pausada ? 'Reanudar' : 'Pausar'}</Boton>}
-          </div>
-          {modo === 'demostrar' && <Nota className="mt-2">Tú eliges cada movimiento (flechas o WASD). Cada elección se guarda como ejemplo etiquetado de {modelo === 'lerk' ? 'LERK (caso)' : 'ARKIS (pendiente de tu aprobación)'}.</Nota>}
-          <div className="mt-2"><Aviso error={error} /></div>
-          {aviso && <div className="mt-2 text-sm border border-accent/40 bg-accent/10 rounded-lg px-3 py-2">{aviso}</div>}
-        </Panel>
 
+        {!p && (
+          <Panel titulo="Sin partida">
+            <div className="mx-auto w-full opacity-60" style={{ maxWidth: 'min(100%, 50vh, 420px)' }}>
+              <Tablero ancho={{ facil: 4, medio: 8, dificil: 16 }[dificultad]} alto={{ facil: 4, medio: 8, dificil: 16 }[dificultad]} segmentos={[]} manzana={null} tema={tema} />
+            </div>
+            <Nota className="mt-2 text-center">Tablero {DIFICULTADES[dificultad]} vacío. Configura la sesión a la derecha y pulsa «Nueva partida».</Nota>
+          </Panel>
+        )}
         {p && (
           <Panel>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2 text-sm">
@@ -130,7 +117,7 @@ export default function SimuladorView({ config, tema, modelo, setModelo }) {
                 {f.pausada && <Insignia>En pausa</Insignia>}
               </span>
             </div>
-            <div className="max-w-[560px] mx-auto">
+            <div className="mx-auto w-full" style={{ maxWidth: 'min(100%, 60vh, 560px)' }}>
               <Tablero ancho={p.ancho} alto={p.alto} segmentos={p.segmentos} manzana={p.manzana} terminada={f.terminada} tema={tema} />
             </div>
             {f.modo !== 'observar' && !f.terminada && (
@@ -158,6 +145,27 @@ export default function SimuladorView({ config, tema, modelo, setModelo }) {
       </div>
 
       <div className="space-y-4">
+        <Panel titulo="Sesión">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Campo etiqueta="Modo"><Selector valor={modo} cambiar={setModo} opciones={MODOS} /></Campo>
+            {modo !== 'jugar' && <Campo etiqueta="Modelo"><Selector valor={modelo} cambiar={setModelo} opciones={modo === 'demostrar' ? { arkis: 'ARKIS (ejemplos)', lerk: 'LERK (casos)' } : MODELOS} /></Campo>}
+            <Campo etiqueta="Dificultad"><Selector valor={dificultad} cambiar={setDificultad} opciones={DIFICULTADES} /></Campo>
+            <Campo etiqueta="Velocidad del juego (mov/s)" ayuda="Define el tiempo de juego: la regla de 30 s equivale a 30 × esta velocidad en pasos."><Numero valor={velocidad} cambiar={setVelocidad} min={1} max={60} /></Campo>
+            <Campo etiqueta="Semilla (vacía = aleatoria)"><Numero valor={semilla} cambiar={setSemilla} min={0} /></Campo>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2 items-center">
+            <Boton variante="primario" onClick={nueva} disabled={!destinoValido}>Nueva partida</Boton>
+            {f?.modo === 'observar' && <>
+              <Boton onClick={() => setCorriendo(!corriendo)} disabled={f.terminada || f.pausada}>{corriendo ? 'Detener' : 'Reproducir'}</Boton>
+              <Boton onClick={() => paso(null)} disabled={f.terminada || corriendo}>Un paso</Boton>
+              <Segmentado opciones={ACELERACION} valor={String(acel)} cambiar={setAcel} />
+            </>}
+            {f && <Boton onClick={() => pausar(!f.pausada)} disabled={f.terminada}>{f.pausada ? 'Reanudar' : 'Pausar'}</Boton>}
+          </div>
+          {modo === 'demostrar' && <Nota className="mt-2">Tú eliges cada movimiento (flechas o WASD). Cada elección se guarda como ejemplo etiquetado de {modelo === 'lerk' ? 'LERK (caso)' : 'ARKIS (pendiente de tu aprobación)'}.</Nota>}
+          <div className="mt-2"><Aviso error={error} /></div>
+          {aviso && <div className="mt-2 text-sm border border-accent/40 bg-accent/10 rounded-lg px-3 py-2">{aviso}</div>}
+        </Panel>
         {f?.decision !== undefined && f?.modo !== 'jugar' && (
           <Panel titulo={f.modo === 'demostrar' ? 'Qué haría el modelo (para comparar)' : 'Decisión y explicación'}>
             <Explicacion decision={f.decision} />

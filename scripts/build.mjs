@@ -1,4 +1,4 @@
-// Compilación centralizada de ARKIS AI LAB.
+// Compilación centralizada de IA-SNAKE.
 //
 //   npm run build            entorno + frontend + validación de producción + backend (sintaxis
 //                            siempre; verificación completa si las dependencias están instaladas)
@@ -98,9 +98,9 @@ function verificarBackend(completo) {
     aviso('Python no disponible aquí: se omite la validación del backend (este proveedor solo publica el frontend).');
     return;
   }
-  const sintaxis = spawnSync(py, ['-m', 'compileall', '-q', 'arkis_lab', 'run.py'], { cwd: RAIZ, encoding: 'utf8' });
+  const sintaxis = spawnSync(py, ['-m', 'compileall', '-q', 'ia_snake', 'run.py'], { cwd: RAIZ, encoding: 'utf8' });
   if (sintaxis.status !== 0) fallar(`Error de sintaxis en el backend:\n${sintaxis.stdout}${sintaxis.stderr}`);
-  ok('sintaxis de arkis_lab/ correcta');
+  ok('sintaxis de ia_snake/ correcta');
 
   const deps = spawnSync(py, ['-c', 'import fastapi, uvicorn, numpy, sklearn, skops'], { cwd: RAIZ });
   if (deps.status !== 0) {
@@ -109,8 +109,8 @@ function verificarBackend(completo) {
     return;
   }
   const env = { ...process.env };
-  if (DESPLIEGUE) { delete env.APP_ENV; delete env.ARKIS_TOKEN; delete env.CORS_ORIGINS; }   // config del backend: vive en su propio servicio
-  const v = spawnSync(py, ['-m', 'arkis_lab.servidor.verificar'], { cwd: RAIZ, encoding: 'utf8', env });
+  if (DESPLIEGUE) { delete env.APP_ENV; delete env.IA_SNAKE_TOKEN; delete env.CORS_ORIGINS; }   // config del backend: vive en su propio servicio
+  const v = spawnSync(py, ['-m', 'ia_snake.servidor.verificar'], { cwd: RAIZ, encoding: 'utf8', env });
   const lineas = v.stdout.split(/\r?\n/).filter(Boolean);
   console.log(lineas.map((l) => `    ${l}`).join('\n'));
   if (v.status !== 0) fallar(`La verificación del backend falló:\n${v.stderr}`);

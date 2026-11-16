@@ -1,7 +1,7 @@
 import pytest
 
-from arkis_lab.nucleo import evolucion
-from arkis_lab.nucleo.recompensas import ConfigRecompensa, calcular_recompensa
+from ia_snake.nucleo import evolucion
+from ia_snake.nucleo.recompensas import ConfigRecompensa, calcular_recompensa
 
 CFG = ConfigRecompensa()
 
