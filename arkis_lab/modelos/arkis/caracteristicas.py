@@ -44,3 +44,20 @@ def caracteristicas(p: Percepcion) -> np.ndarray:
         c.longitud / (p.ancho * p.alto),
     ]
     return np.asarray(v, dtype=np.float64)
+
+
+def transformar_caracteristicas(v: np.ndarray, nombre_simetria: str) -> np.ndarray:
+    """Aplica una simetría del tablero (cuadrado) directamente al vector: el bloque de la
+    acción a pasa a la acción σ(a) y (dx, dy) se transforma con la misma matriz. Es exacto:
+    tests/test_arkis.py lo compara con recalcular desde el tablero transformado."""
+    from ..situacion import SIMETRIAS, transformar_accion
+    k = len(RASGOS_ACCION)
+    out = v.copy()
+    for i, a in enumerate(ACCIONES):
+        j = ACCIONES.index(transformar_accion(a, nombre_simetria))
+        out[j * k:(j + 1) * k] = v[i * k:(i + 1) * k]
+    a_, b_, c_, d_ = SIMETRIAS[nombre_simetria]
+    base = 4 * k
+    dx, dy = v[base], v[base + 1]
+    out[base], out[base + 1] = a_ * dx + b_ * dy, c_ * dx + d_ * dy
+    return out

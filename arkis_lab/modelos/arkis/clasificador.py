@@ -17,10 +17,10 @@ from sklearn.model_selection import GroupKFold
 from sklearn.tree import DecisionTreeClassifier, export_text
 
 from ...nucleo.motor import ACCIONES
-from ...nucleo.config import obtener_dificultad
 from ..base import Agente, Decision
-from ..situacion import SIMETRIAS, percepcion_de, transformar_accion, transformar_situacion
-from .caracteristicas import NOMBRES, caracteristicas
+from ..bosque_rapido import BosqueRapido
+from ..situacion import SIMETRIAS, percepcion_de, transformar_accion
+from .caracteristicas import NOMBRES, caracteristicas, transformar_caracteristicas
 
 CLASES = [a.etiqueta for a in ACCIONES]
 
@@ -29,26 +29,29 @@ class ErrorEntrenamiento(ValueError):
     pass
 
 
-def _aumentar(ejemplos: list[dict]) -> list[tuple[dict, str]]:
-    out = []
-    for e in ejemplos:
-        lado = obtener_dificultad(e["situacion"]["dificultad"]).ancho
-        for s in SIMETRIAS:
-            sit = e["situacion"] if s == "identidad" else transformar_situacion(e["situacion"], s, lado)
-            et = e["etiqueta"] if s == "identidad" else transformar_accion(
-                _accion(e["etiqueta"]), s).etiqueta
-            out.append((sit, et))
-    return out
-
-
 def _accion(nombre):
     return ACCIONES[CLASES.index(nombre)]
 
 
-def _matriz(pares) -> tuple[np.ndarray, np.ndarray]:
-    X = np.array([caracteristicas(percepcion_de(s)) for s, _ in pares])
-    y = np.array([et for _, et in pares])
-    return X, y
+def _filas(ejemplos: list[dict], aumentar: bool) -> list[tuple[list, list]]:
+    """Por ejemplo: (filas X, etiquetas y). La primera fila es siempre la original; con
+    aumento le siguen las 7 simetrías, aplicadas al vector y a la etiqueta."""
+    out = []
+    for e in ejemplos:
+        x = caracteristicas(percepcion_de(e["situacion"]))
+        if aumentar:
+            sims = list(SIMETRIAS)
+            out.append(([transformar_caracteristicas(x, s) for s in sims],
+                        [transformar_accion(_accion(e["etiqueta"]), s).etiqueta for s in sims]))
+        else:
+            out.append(([x], [e["etiqueta"]]))
+    return out
+
+
+def _apilar(filas, indices) -> tuple[np.ndarray, np.ndarray]:
+    X = [x for i in indices for x in filas[i][0]]
+    y = [et for i in indices for et in filas[i][1]]
+    return np.array(X), np.array(y)
 
 
 def _crear_bosque(semilla: int, n_arboles: int) -> RandomForestClassifier:
@@ -85,18 +88,17 @@ def entrenar(ejemplos: list[dict], semilla: int = 0, aumentar: bool = True,
     metricas: dict = {"ejemplos": len(ejemplos), "episodios": n_grupos, "aumento": aumentar,
                       "semilla": semilla, "n_arboles": n_arboles}
 
+    filas = _filas(ejemplos, aumentar)
     if n_grupos >= 2:
         k = min(5, n_grupos)
         reales, predichas, ids = [], [], []
         for tr, te in GroupKFold(n_splits=k).split(np.zeros(len(ejemplos)), groups=grupos):
-            ent = [ejemplos[i] for i in tr]
-            pares = _aumentar(ent) if aumentar else [(e["situacion"], e["etiqueta"]) for e in ent]
-            X, y = _matriz(pares)
+            X, y = _apilar(filas, tr)
             if len(set(y)) < 2:
                 continue
             m = _crear_bosque(semilla, n_arboles).fit(X, y)
             prueba = [ejemplos[i] for i in te]
-            Xt, _ = _matriz([(e["situacion"], e["etiqueta"]) for e in prueba])
+            Xt = np.array([filas[i][0][0] for i in te])
             disp = [[a.etiqueta for a in percepcion_de(e["situacion"]).cuerpo.acciones_disponibles]
                     for e in prueba]
             reales += [e["etiqueta"] for e in prueba]
@@ -124,8 +126,7 @@ def entrenar(ejemplos: list[dict], semilla: int = 0, aumentar: bool = True,
         metricas["aviso"] = ("Sin validación: hacen falta ejemplos de al menos 2 episodios "
                              "distintos para evaluar sin fuga de datos.")
 
-    pares = _aumentar(ejemplos) if aumentar else [(e["situacion"], e["etiqueta"]) for e in ejemplos]
-    X, y = _matriz(pares)
+    X, y = _apilar(filas, range(len(ejemplos)))
     modelo = _crear_bosque(semilla, n_arboles).fit(X, y)
     metricas["filas_entrenamiento"] = int(len(y))
     metricas["importancias"] = sorted(
@@ -142,6 +143,7 @@ class ArkisAgente(Agente):
 
     def __init__(self, modelo: RandomForestClassifier | None = None):
         self.modelo = modelo
+        self._rapido = BosqueRapido(modelo) if modelo is not None else None
 
     def decidir(self, percepcion, rng=None) -> Decision:
         disp = percepcion.cuerpo.acciones_disponibles
@@ -150,7 +152,7 @@ class ArkisAgente(Agente):
             return Decision(a, {}, {"tipo": "sin_entrenar",
                                     "texto": "ARKIS no tiene modelo entrenado: acción al azar."})
         x = caracteristicas(percepcion).reshape(1, -1)
-        fila = self.modelo.predict_proba(x)[0]
+        fila = self._rapido.predict_proba(x)[0]
         clases = list(self.modelo.classes_)
         punt = {a: float(fila[clases.index(a.etiqueta)]) if a.etiqueta in clases else 0.0
                 for a in ACCIONES}

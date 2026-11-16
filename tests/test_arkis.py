@@ -52,6 +52,23 @@ def test_simetrias_son_exactas(sim):
     assert po.manzana.manhattan == pt.manzana.manhattan
 
 
+@pytest.mark.parametrize("sim", list(SIMETRIAS))
+def test_simetria_sobre_el_vector_igual_a_recalcular(sim):
+    from arkis_lab.modelos.arkis.caracteristicas import transformar_caracteristicas
+    rng = random.Random(4)
+    for semilla in range(5):
+        ent = Entorno("medio")
+        perc = ent.reiniciar(semilla)
+        for _ in range(30):
+            if ent.terminado:
+                break
+            s = situacion_de(ent.partida)
+            v = caracteristicas(percepcion_de(s))
+            esperado = caracteristicas(percepcion_de(transformar_situacion(s, sim, 8)))
+            assert np.allclose(transformar_caracteristicas(v, sim), esperado)
+            perc = ent.paso(politica_voraz(perc, rng)).percepcion
+
+
 def test_dataset_etiquetas_validas_correccion_y_papelera():
     ds = Dataset()
     sit = situacion_de(Partida.desde_estado("medio", 0, [(4, 4), (3, 4)], ACCIONES[3], (7, 7)))
