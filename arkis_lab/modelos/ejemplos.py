@@ -1,4 +1,4 @@
-"""Conjunto de ejemplos de ARKIS. Las etiquetas SOLO las pone el usuario.
+"""Conjunto de ejemplos etiquetados (ARKIS y casos de LERK). Las etiquetas SOLO las pone el usuario.
 
 Ejemplo:
   id, situacion (tablero serializado), etiqueta (acción o None si solo se recopiló),
@@ -13,8 +13,8 @@ import time
 import uuid
 from collections import Counter
 
-from ...nucleo.motor import Accion
-from ..situacion import accion_por_nombre, percepcion_de
+from ..nucleo.motor import Accion
+from .situacion import accion_por_nombre, percepcion_de
 
 ORIGENES = ("demostracion", "captura", "correccion")
 
