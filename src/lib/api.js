@@ -1,24 +1,64 @@
-/* Cliente del servidor del laboratorio. Rutas relativas: en desarrollo Vite hace de
-   proxy hacia el puerto 8000; en producción el mismo servidor sirve la web. */
+/* Cliente HTTP único del laboratorio: ningún componente llama a fetch directamente.
 
-async function pedir(metodo, ruta, cuerpo) {
-  const r = await fetch(ruta, {
-    method: metodo,
-    headers: cuerpo !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined,
-  });
-  if (!r.ok) {
-    let msg = `${r.status} ${r.statusText}`;
-    try { const j = await r.json(); msg = j.detail ? (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)) : msg; } catch { /* sin cuerpo */ }
-    throw new Error(msg);
+   URL base (VITE_API_URL, se fija al compilar):
+   - vacía  → rutas relativas /api/… (desarrollo con el proxy de Vite, o el contenedor
+              que sirve web y API en el mismo dominio);
+   - https://… → backend en otro dominio (frontend en Netlify o Vercel). El backend
+              debe incluir ese dominio en CORS_ORIGINS.
+   La clave de escritura NO va en el build: la escribe el usuario y se guarda solo en su
+   navegador. */
+
+export const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const TIEMPO_MAXIMO_MS = 30_000;
+const CLAVE_TOKEN = 'arkis:token';
+
+export function leerToken() {
+  try { return localStorage.getItem(CLAVE_TOKEN) || ''; } catch { return ''; }
+}
+
+export function guardarToken(t) {
+  try { if (t) localStorage.setItem(CLAVE_TOKEN, t); else localStorage.removeItem(CLAVE_TOKEN); } catch { /* sin almacenamiento */ }
+}
+
+async function pedir(metodo, ruta, cuerpo, tiempo = TIEMPO_MAXIMO_MS) {
+  const headers = {};
+  if (cuerpo !== undefined) headers['Content-Type'] = 'application/json';
+  const token = leerToken();
+  if (token) headers['X-Arkis-Token'] = token;
+  const control = new AbortController();
+  const temporizador = setTimeout(() => control.abort(), tiempo);
+  let r;
+  try {
+    r = await fetch(API_URL + ruta, {
+      method: metodo, headers, signal: control.signal,
+      body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined,
+    });
+  } catch (e) {
+    throw new Error(e.name === 'AbortError'
+      ? 'El servidor tardó demasiado en responder.'
+      : 'No se pudo conectar con el servidor del laboratorio.');
+  } finally {
+    clearTimeout(temporizador);
   }
   const tipo = r.headers.get('content-type') || '';
-  return tipo.includes('application/json') ? r.json() : r.blob();
+  if (!r.ok) {
+    let msg = r.status === 401 ? 'Esta acción necesita la clave del laboratorio (arriba a la derecha).' : `Error ${r.status}`;
+    if (tipo.includes('application/json')) {
+      try {
+        const j = await r.json();
+        if (j.detail && r.status !== 401) msg = typeof j.detail === 'string' ? j.detail : 'Datos no válidos';
+      } catch { /* cuerpo ilegible */ }
+    }
+    throw new Error(msg);
+  }
+  if (tipo.includes('application/json')) return r.json();
+  if (tipo.includes('application/zip') || tipo.includes('octet-stream')) return r.blob();
+  throw new Error('Respuesta inesperada del servidor (no es JSON).');
 }
 
 export const api = {
   get: (ruta) => pedir('GET', ruta),
-  post: (ruta, cuerpo = {}) => pedir('POST', ruta, cuerpo),
+  post: (ruta, cuerpo = {}, tiempo) => pedir('POST', ruta, cuerpo, tiempo),
   patch: (ruta, cuerpo) => pedir('PATCH', ruta, cuerpo),
   del: (ruta) => pedir('DELETE', ruta),
 };

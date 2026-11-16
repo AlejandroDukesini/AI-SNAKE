@@ -5,12 +5,16 @@
   "type": "module",
   "description": "ARKIS AI LAB: cinco metodologias de aprendizaje (ML, simbolico, refuerzo e hibridos) resolviendo Snake. React + Vite; los modelos corren en Python.",
   "scripts": {
-    "dev": "python run.py",
-    "vite": "vite",
-    "server": "python -m uvicorn arkis_lab.servidor.app:app --port 8000",
-    "build": "vite build",
-    "start": "python run.py --prod",
+    "dev": "vite",
+    "dev:backend": "python -m uvicorn arkis_lab.servidor.app:app --reload --port 8000",
+    "dev:all": "python run.py",
+    "build": "node scripts/build.mjs",
+    "build:frontend": "node scripts/build.mjs --solo=frontend",
+    "build:backend": "node scripts/build.mjs --solo=backend",
+    "build:netlify": "node scripts/build.mjs --plataforma=netlify",
+    "build:vercel": "node scripts/build.mjs --plataforma=vercel",
     "preview": "vite preview",
+    "start": "python run.py --prod",
     "test": "python -m pytest"
   },
   "dependencies": {
@@ -22,5 +26,8 @@
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.0",
     "vite": "^6.0.7"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

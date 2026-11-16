@@ -2,17 +2,16 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// El frontend usa SIEMPRE rutas relativas (/api/..., /ws/...). En desarrollo
-// este proxy las reenvia al servidor de Python; en produccion es ese mismo
-// servidor quien sirve la web, asi que las rutas ya apuntan a el. Resultado:
-// cero URLs escritas a mano en el codigo React y el mismo build vale en ambos.
+// El frontend llama siempre a través de src/lib/api.js. En desarrollo VITE_API_URL está
+// vacía: las rutas /api/... son relativas y este proxy las reenvía al servidor Python
+// local. En Netlify/Vercel, VITE_API_URL apunta al backend desplegado (ver
+// DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt).
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
     proxy: {
       '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-      '/ws':  { target: 'ws://127.0.0.1:8000', ws: true },
     },
   },
   build: {

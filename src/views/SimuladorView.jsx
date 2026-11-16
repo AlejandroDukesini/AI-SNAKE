@@ -80,8 +80,8 @@ export default function SimuladorView({ config, tema, modelo, setModelo }) {
       const situacion = await api.get(`/api/sesiones/${f.id}/situacion`);
       let r;
       if (f.modelo === 'arkis') { await api.post('/api/arkis/ejemplos', { situacion, etiqueta: accion }); r = 'Guardado como ejemplo de ARKIS (pendiente de aprobar en Entrenamiento).'; }
-      if (f.modelo === 'lerk') { const c = await api.post('/api/lerk/corregir', { situacion, correcta: accion }); r = c.sin_cambios ? 'LERK ya elegía esa acción.' : `LERK corregido: ${c.elegida_antes} → ${c.elegida_despues}${c.excepcion ? ' (excepción añadida)' : ''}${c.regla_nueva ? ' (regla nueva)' : ''}.`; }
-      if (f.modelo === 'clark') { const c = await api.post('/api/clark/corregir', { situacion, correcta: accion }); r = `CLARK corregido: ${c.elegida_antes} → ${c.elegida_despues}. La tabla Q no se toca: solo aprende de recompensas.`; }
+      if (f.modelo === 'lerk') { const c = await api.post('/api/lerk/corregir', { situacion, correcta: accion }, 120_000); r = c.sin_cambios ? 'LERK ya elegía esa acción.' : `LERK corregido: ${c.elegida_antes} → ${c.elegida_despues}${c.excepcion ? ' (excepción añadida)' : ''}${c.regla_nueva ? ' (regla nueva)' : ''}.`; }
+      if (f.modelo === 'clark') { const c = await api.post('/api/clark/corregir', { situacion, correcta: accion }, 120_000); r = `CLARK corregido: ${c.elegida_antes} → ${c.elegida_despues}. La tabla Q no se toca: solo aprende de recompensas.`; }
       if (f.modelo === 'bork') r = 'BORK solo aprende de recompensas: no admite correcciones directas.';
       setAviso(r);
       setF(await api.get(`/api/sesiones/${f.id}`));

@@ -5,7 +5,7 @@
 ================================================================================
   Levanta el proyecto entero con un solo comando:
 
-      npm run dev     -> python run.py            (desarrollo)
+      npm run dev:all -> python run.py            (desarrollo)
       npm start       -> python run.py --prod     (web ya compilada)
 
   En DESARROLLO arranca dos procesos en paralelo:
@@ -149,9 +149,8 @@ def lanzar_api(host):
 
 def lanzar_vite():
     """Arranca el servidor de desarrollo de Vite como proceso hijo."""
-    # Se llama a `npm run vite`, NO a `npm run dev`: dev es este mismo script y
-    # se llamaria a si mismo en bucle infinito.
-    cmd = [npm_cmd(), "run", "vite"]
+    # `npm run dev` es solo Vite; este script es `npm run dev:all`.
+    cmd = [npm_cmd(), "run", "dev"]
     log("orquestador", f"Interfaz  -> http://localhost:{VITE_PORT}")
     return subprocess.Popen(cmd, cwd=SCRIPT_DIR)
 

@@ -1,0 +1,36 @@
+# Netlify publica el FRONTEND de ARKIS AI LAB.
+# Netlify no ofrece runtime de Python en producción (sus funciones son JavaScript/TypeScript
+# y Go), así que el backend Python se ejecuta en su propio servicio (Dockerfile) y la web lo
+# llama en VITE_API_URL. Ver DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt.
+
+[build]
+  command = "npm run build:netlify"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # Netlify instala requirements.txt durante el build si lo encuentra. Con esta versión la
+  # instalación funciona y el build verifica de verdad que el backend arranca (no lo ejecuta
+  # en producción).
+  PYTHON_VERSION = "3.12"
+  # VITE_API_URL se define en Site configuration → Environment variables (no aquí).
+
+# La aplicación es una sola página: cualquier ruta sirve index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

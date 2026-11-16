@@ -5,12 +5,15 @@ Arranque:  python run.py   (o: uvicorn arkis_lab.servidor.app:app --port 8000)
 from __future__ import annotations
 
 import base64
+import hmac
 import os
+import traceback
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -25,13 +28,48 @@ from ..nucleo import evolucion
 from ..nucleo.config import (DIFICULTADES, SEGUNDOS_CICLO, VELOCIDAD_MOVIMIENTO_POR_DEFECTO,
                              VERSION_MOTOR)
 from ..nucleo.recompensas import ConfigRecompensa
+from .ajustes import cargar_ajustes
 from .sesiones import GestorSesiones
 from .trabajos import GestorTrabajos
 
 RAIZ_DATOS = os.environ.get("ARKIS_LAB_DATOS")
 DIST = Path(__file__).resolve().parents[2] / "dist"
+AJUSTES = cargar_ajustes()          # falla al arrancar si la configuración es insegura
+MAX_IMPORTACION = 70 * 1024 * 1024  # base64 de un .zip de ~50 MB
 
-app = FastAPI(title="ARKIS AI LAB", version=VERSION_MOTOR)
+app = FastAPI(title="ARKIS AI LAB", version=VERSION_MOTOR,
+              docs_url=None if AJUSTES.produccion else "/docs",
+              redoc_url=None, openapi_url=None if AJUSTES.produccion else "/openapi.json")
+
+@app.middleware("http")
+async def proteger_escritura(request: Request, call_next):
+    """Con ARKIS_TOKEN definido, modificar o exportar exige la cabecera X-Arkis-Token."""
+    ruta = request.url.path
+    protegida = ruta.startswith("/api/") and (
+        request.method in ("POST", "PATCH", "PUT", "DELETE") or ruta.endswith("/exportar"))
+    if AJUSTES.token and protegida:
+        recibido = request.headers.get("x-arkis-token", "")
+        if not hmac.compare_digest(recibido.encode(), AJUSTES.token.encode()):
+            return JSONResponse({"detail": "Falta la clave del laboratorio o es incorrecta"}, 401)
+    return await call_next(request)
+
+
+# CORS se añade DESPUÉS para ser el middleware más externo: así también las respuestas 401
+# llevan sus cabeceras y el navegador puede mostrar el motivo.
+if AJUSTES.origenes_cors:
+    app.add_middleware(CORSMiddleware, allow_origins=list(AJUSTES.origenes_cors),
+                       allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "DELETE"],
+                       allow_headers=["Content-Type", "X-Arkis-Token"],
+                       expose_headers=["Content-Disposition"], max_age=600)
+
+
+@app.exception_handler(Exception)
+async def error_inesperado(request: Request, exc: Exception):
+    """Errores no previstos: se registran en el servidor; al cliente no se le filtran detalles
+    internos en producción."""
+    traceback.print_exception(exc)
+    detalle = "Error interno del servidor" if AJUSTES.produccion else f"{type(exc).__name__}: {exc}"
+    return JSONResponse({"detail": detalle}, 500)
 servicios = {
     "arkis": ServicioArkis(RAIZ_DATOS),
     "lerk": ServicioLerk(RAIZ_DATOS),
@@ -62,7 +100,8 @@ def _error(e: Exception):
 # --- Configuración general ----------------------------------------------------
 @app.get("/api/salud")
 def salud():
-    return {"ok": True, "motor": VERSION_MOTOR}
+    return {"ok": True, "motor": VERSION_MOTOR, "entorno": AJUSTES.entorno,
+            "requiere_clave": AJUSTES.token is not None}
 
 
 @app.get("/api/config")
@@ -138,9 +177,11 @@ class Importar(BaseModel):
 @app.post("/api/modelos/{clave}/importar")
 def importar(clave: str, cuerpo: Importar):
     s = svc(clave)
+    if len(cuerpo.zip_base64) > MAX_IMPORTACION:
+        raise HTTPException(413, "El archivo es demasiado grande (máximo ~50 MB)")
     try:
         with s.lock:
-            vs = s.almacen.importar(base64.b64decode(cuerpo.zip_base64))
+            vs = s.almacen.importar(base64.b64decode(cuerpo.zip_base64, validate=True))
             s.cargar()
     except Exception as e:
         _error(e)
@@ -585,6 +626,8 @@ if (DIST / "index.html").is_file():
 
     @app.get("/{ruta:path}")
     def spa(ruta: str):
+        if ruta == "api" or ruta.startswith("api/"):
+            raise HTTPException(404, "Ruta de API inexistente")
         f = DIST / ruta
         if ruta and f.is_file() and DIST in f.resolve().parents:
             return FileResponse(f)

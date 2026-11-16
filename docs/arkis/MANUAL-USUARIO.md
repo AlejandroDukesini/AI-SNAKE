@@ -8,7 +8,7 @@ Este manual explica qué puedes hacer en cada pantalla.
 ```bash
 pip install -r requirements.txt
 npm install
-npm run dev          # abre http://localhost:5173
+npm run dev:all      # abre http://localhost:5173
 ```
 
 ## Pantallas

@@ -1,6 +1,6 @@
 /* ARKIS AI LAB — interfaz del laboratorio. */
 import { useEffect, useState } from 'react';
-import { api } from './lib/api';
+import { API_URL, api, guardarToken, leerToken } from './lib/api';
 import { usePreferencia } from './lib/hooks';
 import { Segmentado } from './components/ui';
 import PanelView from './views/PanelView';
@@ -22,11 +22,15 @@ export default function App() {
   const [modelo, setModelo] = usePreferencia('modelo', 'arkis');
   const [config, setConfig] = useState(null);
   const [error, setError] = useState(null);
+  const [salud, setSalud] = useState(null);
+  const [token, setToken] = useState(leerToken);
 
   useEffect(() => { document.documentElement.dataset.theme = tema; }, [tema]);
   useEffect(() => {
     api.get('/api/config').then(setConfig).catch((e) => setError(e.message));
+    api.get('/api/salud').then(setSalud).catch(() => {});
   }, []);
+  const cambiarToken = (t) => { setToken(t); guardarToken(t.trim()); };
 
   const ir = (v, m) => { if (m) setModelo(m); setVista(v); };
   const props = { config, tema, modelo, setModelo, ir };
@@ -40,15 +44,25 @@ export default function App() {
             <div className="text-xs text-muted">Cinco metodologías de aprendizaje, un mismo Snake</div>
           </div>
           <nav className="overflow-x-auto max-w-full"><Segmentado opciones={VISTAS} valor={vista} cambiar={setVista} /></nav>
-          <select className="bg-surface2 border border-line rounded-lg px-2 py-1 text-sm" value={tema} onChange={(e) => setTema(e.target.value)}>
-            {Object.entries(TEMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
+          <div className="flex items-center gap-2">
+            {salud?.requiere_clave && (
+              <input type="password" value={token} onChange={(e) => cambiarToken(e.target.value)}
+                placeholder="Clave del laboratorio" autoComplete="current-password"
+                title="Necesaria para entrenar, editar o exportar. Se guarda solo en este navegador."
+                className={`w-44 bg-surface2 border rounded-lg px-2 py-1 text-sm ${token ? 'border-line' : 'border-danger'}`} />
+            )}
+            <select className="bg-surface2 border border-line rounded-lg px-2 py-1 text-sm" value={tema} onChange={(e) => setTema(e.target.value)}>
+              {Object.entries(TEMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-4 py-5">
         {error && (
           <div className="mb-4 text-sm border border-danger/40 bg-danger/10 rounded-xl p-4">
-            No hay conexión con el servidor del laboratorio ({error}). Arráncalo con <code>npm run dev</code> o <code>python run.py</code>.
+            No hay conexión con el servidor del laboratorio ({error}).{' '}
+            {API_URL ? <>Servidor configurado: <code>{API_URL}</code>. Comprueba que está en marcha y que su CORS_ORIGINS incluye este dominio.</>
+              : <>En local, arráncalo con <code>npm run dev:all</code>.</>}
           </div>
         )}
         {config && vista === 'panel' && <PanelView {...props} />}
