@@ -4,7 +4,7 @@
 # llama en VITE_API_URL. Ver DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt.
 
 [build]
-  command = "npm run build:netlify"
+  command = "npm run build"        # detecta Netlify (NETLIFY=true)
   publish = "dist"
 
 [build.environment]

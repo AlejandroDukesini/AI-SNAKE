@@ -1,0 +1,306 @@
+IA-SNAKE - CONEXION API REST: FRONTEND (NETLIFY / VERCEL) + BACKEND (RENDER)
+=============================================================================
+Fecha: 2026-11-16 · Rama: sistema-despliegue -> Beta
+Complementa DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt (encargo anterior). Donde difieren,
+manda ESTE documento (Render pasa de Docker al runtime nativo de Python).
+
+ESTADO DE VERIFICACION (sin adornos)
+  Verificado aquí: 125 pruebas automáticas; integración REAL en navegador (Chrome
+  headless) entre un frontend en un origen y el backend en modo producción en otro
+  (arranque en frío, CORS, GET/POST/PATCH/DELETE, clave, persistencia tras reinicio);
+  builds de Netlify y Vercel simulados con sus variables de sistema.
+  NO verificado (no tengo acceso a tus cuentas): un despliegue real en Render, Netlify o
+  Vercel, ni la conexión desde un frontend publicado. Pasos exactos en las secciones 12-14.
+
+
+1. ARQUITECTURA
+---------------
+     Usuario
+        |
+        v
+  Frontend estático (React + Vite) en Netlify o Vercel   https://<sitio>.netlify.app
+        |                                                 https://<proyecto>.vercel.app
+        |  HTTPS + JSON   (VITE_API_URL, cabecera X-IA-Snake-Token para escribir)
+        v
+  API REST /api/*  ·  FastAPI en Render (Web Service, Python)   https://<servicio>.onrender.com
+        |
+        v
+  Disco persistente de Render: versiones de los modelos (JSON/skops con SHA-256),
+  datos de trabajo (JSON) y SQLite (episodios, sesiones, récords). No hay base de datos
+  externa: el proyecto no la usa y no se ha añadido.
+
+  Frontend: interfaz, navegación (#/vista/modelo), interacción, peticiones, estados.
+            Sin secretos ni lógica de negocio.
+  Backend:  toda la lógica (motor de Snake, 4 modelos, entrenamiento, evaluación),
+            validación, autorización de escritura, persistencia, respuestas JSON.
+
+2. ESTRUCTURA DE CARPETAS (lo relevante)
+----------------------------------------
+  ia_snake/                backend Python
+    nucleo/                motor, percepción, recompensas, ciclos, evolución
+    modelos/               arkis, lerk, bork, clark (+ observación del entrenamiento)
+    persistencia/          versiones, SQLite, serialización segura
+    evaluacion/            semillas y estadísticos
+    servidor/app.py        FastAPI: ENTRADA  ia_snake.servidor.app:app
+    servidor/ajustes.py    configuración por entorno, validada al arrancar
+  src/                     frontend React
+    lib/api.js             ÚNICO cliente HTTP (URL base, reintentos, errores, arranque en frío)
+  scripts/build.mjs        build centralizado con validaciones
+  render.yaml              Blueprint de Render (backend)
+  netlify.toml             Netlify (frontend)
+  vercel.json              Vercel (frontend)
+  Dockerfile               alternativa para otros hosts (Railway, Fly.io, VPS)
+  requirements.txt         dependencias del backend
+  package.json             dependencias y scripts del frontend
+  .env.example             plantilla de variables
+
+3. FRONTEND
+-----------
+  React 18 + Vite 6 + Tailwind 4. Entrada src/main.jsx. Salida dist/. Navegación por
+  estado + hash (#/entrenamiento/arkis); SPA: Netlify y Vercel sirven index.html.
+  src/lib/api.js:
+    - URL base = VITE_API_URL (vacía = rutas relativas: proxy de Vite en local).
+    - Timeout por petición (30 s; 120 s en operaciones lentas síncronas).
+    - Errores clasificados: conexión, tiempo agotado, no disponible (502/503/504),
+      HTTP (4xx con el motivo del servidor; 5xx sin detalles internos), JSON inválido.
+    - 204 sin cuerpo admitido.
+    - Reintentos SOLO en GET (2, con espera creciente) y solo ante conexión o 502/503/504.
+      POST, PATCH y DELETE nunca se reintentan solos.
+    - El visor y el seguimiento de trabajos consultan sin reintentos propios y nunca dos
+      peticiones a la vez.
+    - esperarServidor(): arranque en frío (ver sección 6).
+
+4. BACKEND
+----------
+  Python 3.10+ (Render: 3.12.8), FastAPI + uvicorn. Entrada ia_snake.servidor.app:app.
+  Dependencias: numpy, scikit-learn, skops, fastapi, uvicorn[standard].
+  Autorización: con IA_SNAKE_TOKEN definido (obligatorio en producción), toda escritura
+  (POST/PATCH/PUT/DELETE) y la exportación exigen X-IA-Snake-Token (comparación en
+  tiempo constante). Lectura libre. No hay cookies ni sesiones de usuario.
+  Validación: Pydantic (422) + reglas de dominio (400) + recursos inexistentes (404).
+  Errores no previstos: 500 genérico en producción; el detalle solo va al log.
+  /docs y /openapi.json desactivados en producción.
+
+5. ENDPOINTS (46, extraídos de la aplicación; código de éxito)
+--------------------------------------------------------------
+  Salud y configuración
+    GET    /api/health                        200  {"status":"ok","service":"ia-snake-backend","version"}
+    GET    /api/salud                         200  igual + entorno y si exige clave (lo usa la web)
+    GET    /api/config                        200  dificultades, umbrales E, recompensas, predicados
+  Modelos (clave: arkis | lerk | bork | clark)
+    GET    /api/modelos                       200  los 5 modelos (MABU: pendiente)
+    GET    /api/modelos/{clave}               200  detalle, versiones, sesiones, evaluaciones
+    GET    /api/modelos/{clave}/episodios     200  historial de episodios
+    POST   /api/modelos/{clave}/restaurar     200  cambiar versión actual (404 si no existe)
+    GET    /api/modelos/{clave}/exportar      200  .zip (requiere clave)
+    POST   /api/modelos/{clave}/importar      201  crea versiones desde un .zip (base64)
+    POST   /api/modelos/{clave}/confiar       200  confirmar origen de un artefacto importado
+    POST   /api/modelos/{clave}/copia         201  copia de seguridad
+    POST   /api/modelos/{clave}/trabajos      202  lanza entrenamiento/evaluación asíncrona (409 si ya hay uno)
+  Trabajos asíncronos
+    GET    /api/trabajos                      200
+    GET    /api/trabajos/{id}                 200  estado, progreso, resultado
+    POST   /api/trabajos/{id}/cancelar        200
+    GET    /api/trabajos/{id}/vista           200  último paso real + historial de episodios
+    POST   /api/trabajos/{id}/control         200  pausar | reanudar | detener | ritmo
+    POST   /api/comparar                      202  comparación de todos los modelos (asíncrona)
+  Sesiones de juego
+    POST   /api/sesiones                      201  crear partida (observar | demostrar | jugar)
+    GET    /api/sesiones/{id}                 200
+    POST   /api/sesiones/{id}/paso            200
+    POST   /api/sesiones/{id}/pausa           200
+    POST   /api/sesiones/{id}/capturar        201  guarda la situación sin etiqueta para ARKIS
+    GET    /api/sesiones/{id}/situacion       200
+  ARKIS
+    GET    /api/arkis/ejemplos                200  listado filtrado y paginado
+    POST   /api/arkis/ejemplos                201  crear ejemplo (corrección)
+    PATCH  /api/arkis/ejemplos/{id}           200  cambiar etiqueta (404 si no existe)
+    POST   /api/arkis/ejemplos/aprobar        200
+    DELETE /api/arkis/ejemplos/{id}           204  a la papelera (recuperable)
+    POST   /api/arkis/ejemplos/{id}/restaurar 200
+    POST   /api/arkis/predecir                200
+    GET    /api/arkis/arbol                   200
+  LERK
+    POST   /api/lerk/reglas                   201
+    PATCH  /api/lerk/reglas/{id}              200  (404 si no existe)
+    DELETE /api/lerk/reglas/{id}              200  devuelve los ids eliminados (en cascada)
+    POST   /api/lerk/inducir | generalizar | validar | corregir | diferencias   200
+    GET    /api/lerk/conflictos               200
+  BORK y CLARK
+    POST   /api/bork/config · /api/bork/reiniciar · /api/clark/config · /api/clark/corregir   200
+    GET    /api/bork/tabla                    200
+  Errores comunes: 400 petición inválida · 401 falta la clave o es incorrecta · 404 no
+  existe · 409 conflicto (trabajo en curso) · 413 importación demasiado grande ·
+  422 esquema inválido · 500 error interno (genérico).
+  No hay PUT: ningún recurso se reemplaza entero; las actualizaciones son parciales (PATCH)
+  o acciones (POST sobre el recurso).
+
+6. ARRANQUE EN FRIO Y ESTADOS
+-----------------------------
+  Si el backend está dormido (plan gratuito de Render: se duerme tras 15 min sin tráfico y
+  puede tardar ~1 min en despertar), la web no muestra un error definitivo:
+    «Conectando con el servidor…» → «El servidor está arrancando (N s)…» → «Cargando
+    información…» → interfaz. Si en 90 s no responde: «no disponible temporalmente»
+    (502/503/504), «no respondió a tiempo» o «no se pudo conectar», con botón Reintentar.
+  Se sondea solo GET /api/health (idempotente), con espera creciente y tope de 90 s.
+
+7. CORS
+-------
+  El navegador solo deja leer la respuesta si el origen está autorizado. Configuración por
+  entorno (ia_snake/servidor/ajustes.py):
+    CORS_ORIGINS       lista exacta, separada por comas, sin comodines. En producción:
+                       https públicos y http://localhost:PUERTO / http://127.0.0.1:PUERTO
+                       (para conectar un frontend local al backend de Render).
+    CORS_ORIGIN_REGEX  opcional, vistas previas. Debe empezar por ^https://, terminar en $
+                       y fijar el dominio (se rechazan .*, http y patrones sin dominio).
+  Métodos: GET, POST, PATCH, DELETE. Cabeceras: Content-Type, X-IA-Snake-Token. Sin
+  credenciales (no hay cookies). CORS es el middleware más externo: los 401 también llevan
+  sus cabeceras. CORS NO es autenticación: la escritura se valida con la clave en el
+  servidor.
+  En desarrollo con el proxy de Vite (VITE_API_URL vacía) no hace falta CORS.
+
+8. VARIABLES DE ENTORNO
+-----------------------
+  Frontend (se INCRUSTAN en el JavaScript público; el build rechaza VITE_* con nombres de
+  secreto):
+    VITE_API_URL     vacía (proxy local) · http://localhost:8000 (local sin proxy) ·
+                     https://<servicio>.onrender.com (Netlify/Vercel; obligatoria, https,
+                     sin localhost, sin /api; el build lo comprueba)
+  Backend (Render):
+    PYTHON_VERSION   3.12.8
+    APP_ENV          produccion
+    IA_SNAKE_TOKEN   secreto ≥ 16 caracteres (sin él no arranca en producción).
+                     python -c "import secrets; print(secrets.token_urlsafe(32))"
+    CORS_ORIGINS     https://<sitio>.netlify.app,https://<proyecto>.vercel.app[,http://localhost:5173]
+    CORS_ORIGIN_REGEX opcional
+    IA_SNAKE_DATOS   /opt/render/project/src/datos (punto de montaje del disco)
+    PORT             lo inyecta Render
+  No existen DATABASE_URL ni SECRET_KEY porque el proyecto no los usa.
+  .env real: ignorado por git. Plantilla: .env.example.
+  Desarrollo / preview / producción: APP_ENV (desarrollo|produccion) en el backend; en
+  Vercel, VITE_API_URL por entorno (Production y Preview) en el panel.
+
+9. COMANDOS LOCALES
+-------------------
+  pip install -r requirements.txt && npm install
+  npm run dev:all          backend :8000 + Vite :5173 (proxy /api)
+  npm run dev              solo Vite
+  npm run dev:backend      solo FastAPI con recarga
+  npm test                 125 pruebas (requirements-dev.txt)
+  Frontend local contra el backend de Render:
+    VITE_API_URL=https://<servicio>.onrender.com npm run dev   y añade
+    http://localhost:5173 a CORS_ORIGINS en Render.
+
+10. BUILD DEL FRONTEND
+----------------------
+  npm install && npm run build  →  dist/
+  En Netlify (NETLIFY=true) y Vercel (VERCEL=1) el build detecta la plataforma y exige
+  VITE_API_URL https pública; comprueba que no queda localhost ni archivos .py/.env en
+  dist/ y valida la sintaxis del backend si hay Python (Netlify lo instala).
+
+11. BUILD Y ARRANQUE DEL BACKEND
+--------------------------------
+  Build:  pip install -r requirements.txt
+  Start:  uvicorn ia_snake.servidor.app:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers
+  Verificación local previa:  npm run build:backend
+  Un solo worker y una sola instancia: hay estado en memoria (partidas en vivo,
+  entrenamientos) y SQLite en disco.
+
+12. CONFIGURACION DE RENDER (render.yaml)
+-----------------------------------------
+   1. Render → New → Blueprint → conecta el repositorio (rama Principal; para probar
+      antes, cambia branch: Beta en render.yaml o en el panel).
+   2. Rellena IA_SNAKE_TOKEN y CORS_ORIGINS (provisional si aún no tienes los dominios).
+   3. Plan starter (el disco necesita plan de pago). Se crea el disco ia-snake-datos de
+      1 GB en /opt/render/project/src/datos.
+   4. Comprueba https://<servicio>.onrender.com/api/health → {"status":"ok",...}
+   Render usa /api/health como health check.
+
+13. CONFIGURACION DE NETLIFY (netlify.toml)
+-------------------------------------------
+   1. Add new site → Import from Git → el repositorio.
+   2. netlify.toml fija: build «npm run build», publish «dist», NODE_VERSION 20,
+      PYTHON_VERSION 3.12, redirección SPA, cabeceras de seguridad.
+   3. Site configuration → Environment variables → VITE_API_URL = https://<servicio>.onrender.com
+   4. Deploy; añade https://<sitio>.netlify.app a CORS_ORIGINS en Render.
+
+14. CONFIGURACION DE VERCEL (vercel.json)
+-----------------------------------------
+   1. Add New → Project → importa el repositorio (preset Vite).
+   2. vercel.json fija: npm ci, «npm run build», salida «dist», rewrite SPA, cabeceras.
+   3. Environment Variables → VITE_API_URL (Production y Preview).
+   4. Deploy; añade https://<proyecto>.vercel.app a CORS_ORIGINS y, para las vistas
+      previas, CORS_ORIGIN_REGEX=^https://<proyecto>-[a-z0-9-]+\.vercel\.app$ (ajústalo
+      al patrón real de tus URLs de preview).
+   El backend Python NO se despliega en Vercel (ver DOCUMENTACION_DESPLIEGUE_...: el estado
+   en memoria, los entrenamientos largos y el disco no encajan en funciones serverless).
+
+15. PRUEBAS REALIZADAS (resultados reales)
+------------------------------------------
+  Automáticas (pytest, 125 pasan; 7 nuevas):
+    - /api/health sin información sensible (solo status, service, version).
+    - 201 al crear, 202 en trabajos asíncronos, 204 al borrar un ejemplo, 404 en
+      recursos inexistentes (ejemplos, reglas, trabajos, versiones, sesiones, modelos),
+      422 de esquema, 400 de dominio.
+    - CORS: localhost explícito admitido en producción; patrón de previews acotado
+      (aceptado para su proyecto, rechazado para otro); patrones abiertos rechazados.
+  Integración real en navegador (Chrome headless + CDP; frontend en http://localhost:4173
+  compilado con VITE_API_URL=http://localhost:8790; backend en modo producción con clave
+  y CORS_ORIGINS=http://localhost:4173). 13/13:
+    - Arranque en frío: con el backend apagado, «Conectando…» y luego «El servidor está
+      arrancando (N s)…»; al encenderlo, la web se recuperó SOLA en 13,4 s sin recargar.
+    - La interfaz muestra el campo de clave porque el backend la exige.
+    - GET /api/health cruzado → 200.
+    - POST sin clave → 401 y el navegador lee el motivo (CORS en los 401).
+    - POST con clave (con preflight) → 201; PATCH → 200; POST /api/sesiones → 201;
+      DELETE inexistente → 404.
+    - Desde un origen NO autorizado (http://localhost:4174) el navegador bloquea la
+      respuesta («Failed to fetch»).
+    - Persistencia: tras reiniciar el backend, la regla creada sigue ahí.
+    - La vista de LERK carga desde el backend remoto y muestra la regla.
+  Builds: NETLIFY=true sin VITE_API_URL → falla con mensaje claro; VERCEL=1 con
+  https://ia-snake-api.onrender.com → correcto y sin localhost en dist/; local → correcto.
+
+16. ERRORES ENCONTRADOS
+-----------------------
+  - No existía /api/health (solo /api/salud).
+  - Recursos inexistentes devolvían 400 o incluso 500: borrar o restaurar un ejemplo
+    inexistente (excepción sin capturar) y cancelar un trabajo inexistente (KeyError).
+  - Creaciones con 200 en lugar de 201; tareas asíncronas sin 202.
+  - En producción CORS solo admitía https: un frontend local no podía usar el backend de
+    Render; no había soporte para previews.
+  - render.yaml usaba Docker, no los comandos nativos de Python.
+  - Sin gestión del arranque en frío: el primer fallo de conexión era un error definitivo.
+  - En Netlify/Vercel había que usar build:netlify/build:vercel en vez de npm run build.
+
+17. SOLUCIONES IMPLEMENTADAS
+----------------------------
+  - GET /api/health (ia_snake/servidor/app.py).
+  - Excepción común NoEncontrado → 404 (modelos/base.py, ejemplos.py, lerk/conocimiento.py,
+    servidor/trabajos.py, persistencia/almacen.py); 201/202/204 en las rutas que lo piden.
+  - CORS: localhost explícito y CORS_ORIGIN_REGEX validado (servidor/ajustes.py).
+  - render.yaml nativo: pip install / uvicorn con $PORT, PYTHON_VERSION, disco y
+    health check /api/health.
+  - src/lib/api.js: reintentos solo en GET, 204, errores clasificados, esperarServidor().
+    src/App.jsx: estados de conexión con Reintentar.
+  - scripts/build.mjs detecta NETLIFY/VERCEL; netlify.toml y vercel.json usan npm run build.
+  - .env.example con los casos local, local sin proxy, producción y previews.
+  - tests/test_api_rest.py (nuevo) y ampliación de tests/test_seguridad.py.
+  Nada se eliminó: los 45 endpoints anteriores siguen; /api/salud se conserva.
+
+18. LIMITACIONES PENDIENTES
+---------------------------
+  - Despliegue real en Render, Netlify y Vercel: requiere tus cuentas (pasos 12-14).
+  - Disco persistente = plan de pago en Render. Sin disco, los modelos se pierden en cada
+    reinicio y despliegue.
+  - Una sola instancia: no escala horizontalmente sin migrar a una base de datos externa.
+  - Las partidas en curso (memoria) se pierden si el backend se reinicia; los modelos y
+    los registros no.
+  - El estado final de error tras 90 s sin respuesta se implementó, pero solo se probó
+    con la recuperación (el backend arrancó antes del tope).
+  - Las vistas previas de Vercel necesitan CORS_ORIGIN_REGEX o su dominio exacto.
+
+FUENTES
+  Render, discos persistentes: https://render.com/docs/disks
+  Render, versión de Python: https://render.com/docs/python-version
+  Render, servicios web (plan gratuito y suspensión): https://render.com/tutorials/web-service-vs-static-site/web-services

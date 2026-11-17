@@ -61,7 +61,7 @@ def test_observar_bork_y_regla_de_lerk(cliente):
     f = cliente.post(f"/api/sesiones/{s['id']}/paso", json={"pasos": 5}).json()
     assert f["partida"]["pasos"] >= 1 and "estado" in f["decision"]["explicacion"]
     r = cliente.post("/api/lerk/reglas", json={"condiciones": ["libre", "acerca"], "conclusion": "preferir"})
-    assert r.status_code == 200 and r.json()["texto"].startswith("SI libre(X)")
+    assert r.status_code == 201 and r.json()["texto"].startswith("SI libre(X)")
     assert cliente.post("/api/lerk/reglas", json={"condiciones": ["x"], "conclusion": "preferir"}).status_code == 400
 
 

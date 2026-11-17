@@ -31,6 +31,10 @@ class ErrorAlmacen(RuntimeError):
     pass
 
 
+class VersionNoEncontrada(ErrorAlmacen, LookupError):
+    pass
+
+
 def sha256(datos: bytes) -> str:
     return hashlib.sha256(datos).hexdigest()
 
@@ -197,6 +201,8 @@ class AlmacenModelo:
         return None
 
     def restaurar(self, version: str) -> None:
+        if version not in [v["version"] for v in self.manifiesto().get("versiones", [])]:
+            raise VersionNoEncontrada(f"No existe la versión {version}")
         with self._lock:
             self.cargar_version(version)          # valida antes de mover el puntero
             m = self.manifiesto()

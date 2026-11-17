@@ -20,7 +20,15 @@ export function guardarToken(t) {
   try { if (t) localStorage.setItem(CLAVE_TOKEN, t); else localStorage.removeItem(CLAVE_TOKEN); } catch { /* sin almacenamiento */ }
 }
 
-async function pedir(metodo, ruta, cuerpo, tiempo = TIEMPO_MAXIMO_MS) {
+/* Error con su categoría, para que la interfaz distinga los casos. */
+export class ErrorApi extends Error {
+  constructor(mensaje, tipo, estado) { super(mensaje); this.tipo = tipo; this.estado = estado; }
+}
+
+const TRANSITORIOS = [502, 503, 504];      // típicos de un servidor que está arrancando
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function intento(metodo, ruta, cuerpo, tiempo) {
   const headers = {};
   if (cuerpo !== undefined) headers['Content-Type'] = 'application/json';
   const token = leerToken();
@@ -34,30 +42,80 @@ async function pedir(metodo, ruta, cuerpo, tiempo = TIEMPO_MAXIMO_MS) {
       body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined,
     });
   } catch (e) {
-    throw new Error(e.name === 'AbortError'
-      ? 'El servidor tardó demasiado en responder.'
-      : 'No se pudo conectar con el servidor del laboratorio.');
+    throw e.name === 'AbortError'
+      ? new ErrorApi('El servidor tardó demasiado en responder.', 'tiempo')
+      : new ErrorApi('No se pudo conectar con el servidor del laboratorio.', 'conexion');
   } finally {
     clearTimeout(temporizador);
   }
+  if (r.status === 204) return null;
   const tipo = r.headers.get('content-type') || '';
   if (!r.ok) {
-    let msg = r.status === 401 ? 'Esta acción necesita la clave del laboratorio (arriba a la derecha).' : `Error ${r.status}`;
-    if (tipo.includes('application/json')) {
+    if (TRANSITORIOS.includes(r.status)) {
+      throw new ErrorApi('El servidor no está disponible en este momento (puede estar arrancando).', 'no_disponible', r.status);
+    }
+    let msg = r.status === 401 ? 'Esta acción necesita la clave del laboratorio (arriba a la derecha).'
+      : r.status >= 500 ? 'Error interno del servidor.' : `Error ${r.status}`;
+    if (tipo.includes('application/json') && r.status < 500) {
       try {
         const j = await r.json();
         if (j.detail && r.status !== 401) msg = typeof j.detail === 'string' ? j.detail : 'Datos no válidos';
       } catch { /* cuerpo ilegible */ }
     }
-    throw new Error(msg);
+    throw new ErrorApi(msg, 'http', r.status);
   }
-  if (tipo.includes('application/json')) return r.json();
+  if (tipo.includes('application/json')) {
+    try { return await r.json(); } catch { throw new ErrorApi('El servidor envió una respuesta JSON inválida.', 'formato', r.status); }
+  }
   if (tipo.includes('application/zip') || tipo.includes('octet-stream')) return r.blob();
-  throw new Error('Respuesta inesperada del servidor (no es JSON).');
+  throw new ErrorApi('Respuesta inesperada del servidor (no es JSON).', 'formato', r.status);
+}
+
+/* GET es idempotente: se reintenta un número LIMITADO de veces si falla la conexión o el
+   servidor responde 502/503/504 (por ejemplo, mientras Render lo despierta). POST, PATCH y
+   DELETE nunca se reintentan solos: podrían duplicar una acción. */
+async function pedir(metodo, ruta, cuerpo, tiempo = TIEMPO_MAXIMO_MS, reintentos = metodo === 'GET' ? 2 : 0) {
+  for (let i = 0; ; i++) {
+    try {
+      return await intento(metodo, ruta, cuerpo, tiempo);
+    } catch (e) {
+      const transitorio = e instanceof ErrorApi && ['conexion', 'no_disponible'].includes(e.tipo);
+      if (!transitorio || i >= reintentos) throw e;
+      await dormir(1500 * (i + 1));
+    }
+  }
+}
+
+/* Arranque en frío: espera a que el backend responda en /api/health, con un tope de tiempo,
+   informando del estado. Estados: conectando → despertando → listo | no_disponible |
+   sin_conexion | tiempo_agotado. */
+export async function esperarServidor(alCambiar, { tope = 90_000 } = {}) {
+  const inicio = Date.now();
+  alCambiar({ estado: 'conectando', segundos: 0 });
+  let ultimo = null;
+  while (Date.now() - inicio < tope) {
+    try {
+      await intento('GET', '/api/health', undefined, 15_000);
+      alCambiar({ estado: 'listo', segundos: Math.round((Date.now() - inicio) / 1000) });
+      return true;
+    } catch (e) {
+      ultimo = e;
+      const segundos = Math.round((Date.now() - inicio) / 1000);
+      alCambiar({ estado: segundos >= 3 ? 'despertando' : 'conectando', segundos, error: e.message });
+      await dormir(Math.min(5000, 1000 + segundos * 100));
+    }
+  }
+  const tipo = ultimo?.tipo;
+  alCambiar({
+    estado: tipo === 'no_disponible' ? 'no_disponible' : tipo === 'tiempo' ? 'tiempo_agotado' : 'sin_conexion',
+    segundos: Math.round((Date.now() - inicio) / 1000), error: ultimo?.message,
+  });
+  return false;
 }
 
 export const api = {
   get: (ruta) => pedir('GET', ruta),
+  getSinReintentos: (ruta) => pedir('GET', ruta, undefined, TIEMPO_MAXIMO_MS, 0),
   post: (ruta, cuerpo = {}, tiempo) => pedir('POST', ruta, cuerpo, tiempo),
   patch: (ruta, cuerpo) => pedir('PATCH', ruta, cuerpo),
   del: (ruta) => pedir('DELETE', ruta),

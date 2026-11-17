@@ -28,6 +28,8 @@ from ..nucleo import evolucion
 from ..nucleo.config import (DIFICULTADES, SEGUNDOS_CICLO, VELOCIDAD_MOVIMIENTO_POR_DEFECTO,
                              VERSION_MOTOR)
 from ..nucleo.recompensas import ConfigRecompensa
+from ..modelos.base import NoEncontrado
+from ..persistencia.almacen import VersionNoEncontrada
 from .ajustes import cargar_ajustes
 from .sesiones import GestorSesiones
 from .trabajos import GestorTrabajos
@@ -56,11 +58,17 @@ async def proteger_escritura(request: Request, call_next):
 
 # CORS se añade DESPUÉS para ser el middleware más externo: así también las respuestas 401
 # llevan sus cabeceras y el navegador puede mostrar el motivo.
-if AJUSTES.origenes_cors:
+if AJUSTES.origenes_cors or AJUSTES.patron_cors:
     app.add_middleware(CORSMiddleware, allow_origins=list(AJUSTES.origenes_cors),
+                       allow_origin_regex=AJUSTES.patron_cors,
                        allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "DELETE"],
                        allow_headers=["Content-Type", "X-IA-Snake-Token"],
                        expose_headers=["Content-Disposition"], max_age=600)
+
+
+@app.exception_handler(NoEncontrado)
+async def no_encontrado(request: Request, exc: NoEncontrado):
+    return JSONResponse({"detail": str(exc)}, 404)
 
 
 @app.exception_handler(Exception)
@@ -94,10 +102,19 @@ def svc(clave: str):
 
 
 def _error(e: Exception):
+    """Errores de dominio → 404 si el recurso no existe, 400 si la petición es inválida."""
+    if isinstance(e, (NoEncontrado, VersionNoEncontrada)):
+        raise HTTPException(404, str(e))
     raise HTTPException(400, str(e))
 
 
 # --- Configuración general ----------------------------------------------------
+@app.get("/api/health")
+def health():
+    """Comprobación de disponibilidad (Render la usa como health check). Sin datos internos."""
+    return {"status": "ok", "service": "ia-snake-backend", "version": VERSION_MOTOR}
+
+
 @app.get("/api/salud")
 def salud():
     return {"ok": True, "motor": VERSION_MOTOR, "entorno": AJUSTES.entorno,
@@ -174,7 +191,7 @@ class Importar(BaseModel):
     zip_base64: str
 
 
-@app.post("/api/modelos/{clave}/importar")
+@app.post("/api/modelos/{clave}/importar", status_code=201)
 def importar(clave: str, cuerpo: Importar):
     s = svc(clave)
     if len(cuerpo.zip_base64) > MAX_IMPORTACION:
@@ -205,7 +222,7 @@ def confiar(clave: str):
     return {"ok": True}
 
 
-@app.post("/api/modelos/{clave}/copia")
+@app.post("/api/modelos/{clave}/copia", status_code=201)
 def copia(clave: str):
     return {"ruta": str(svc(clave).almacen.copia_de_seguridad())}
 
@@ -224,7 +241,7 @@ class NuevoTrabajo(BaseModel):
     parametros: dict = {}
 
 
-@app.post("/api/modelos/{clave}/trabajos")
+@app.post("/api/modelos/{clave}/trabajos", status_code=202)
 def nuevo_trabajo(clave: str, cuerpo: NuevoTrabajo):
     s = svc(clave)
     if cuerpo.tipo not in TIPOS[clave]:
@@ -334,7 +351,7 @@ class Comparar(BaseModel):
     episodios: int = 30
 
 
-@app.post("/api/comparar")
+@app.post("/api/comparar", status_code=202)
 def comparar(cuerpo: Comparar):
     """Todos los modelos y las líneas base en las MISMAS semillas de prueba. Solo métricas
     de juego: las recompensas de algoritmos distintos no son comparables."""
@@ -374,7 +391,7 @@ class NuevaSesion(BaseModel):
     velocidad: float = VELOCIDAD_MOVIMIENTO_POR_DEFECTO
 
 
-@app.post("/api/sesiones")
+@app.post("/api/sesiones", status_code=201)
 def nueva_sesion(c: NuevaSesion):
     if c.dificultad not in DIFICULTADES:
         raise HTTPException(400, "Dificultad inválida")
@@ -434,7 +451,7 @@ def pausa(id_: str, c: Pausa):
     return s.fotograma()
 
 
-@app.post("/api/sesiones/{id_}/capturar")
+@app.post("/api/sesiones/{id_}/capturar", status_code=201)
 def capturar(id_: str):
     """Guarda la situación actual SIN etiqueta en el conjunto de ARKIS, para etiquetarla después."""
     from ..modelos.situacion import situacion_de
@@ -483,7 +500,7 @@ class NuevoEjemplo(BaseModel):
     origen: str = "correccion"
 
 
-@app.post("/api/arkis/ejemplos")
+@app.post("/api/arkis/ejemplos", status_code=201)
 def arkis_agregar(c: NuevoEjemplo):
     """Corrección desde el simulador: tu etiqueta queda pendiente de aprobación."""
     a = servicios["arkis"]
@@ -529,13 +546,14 @@ def arkis_aprobar(c: Aprobar):
     return {"cambiados": n, "estadisticas": a.dataset.estadisticas()}
 
 
-@app.delete("/api/arkis/ejemplos/{id_}")
+@app.delete("/api/arkis/ejemplos/{id_}", status_code=204)
 def arkis_eliminar(id_: str):
+    """Mueve el ejemplo a la papelera (recuperable con /restaurar)."""
     a = servicios["arkis"]
     with a.lock:
         a.dataset.eliminar(id_)
         a.guardar_dataset()
-    return {"ok": True}
+    return Response(status_code=204)
 
 
 @app.post("/api/arkis/ejemplos/{id_}/restaurar")
@@ -560,7 +578,7 @@ def arkis_arbol():
 
 
 # --- LERK -------------------------------------------------------------------
-@app.post("/api/lerk/reglas")
+@app.post("/api/lerk/reglas", status_code=201)
 def lerk_crear(datos: dict = Body(...)):
     try:
         return servicios["lerk"].crear_regla(datos)

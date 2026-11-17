@@ -6,7 +6,7 @@
 
 <p>
   <img alt="Estado" src="https://img.shields.io/badge/estado-en_desarrollo-f5a623?style=flat-square">
-  <img alt="Pruebas" src="https://img.shields.io/badge/pytest-118_pasan-5ad19a?style=flat-square">
+  <img alt="Pruebas" src="https://img.shields.io/badge/pytest-125_pasan-5ad19a?style=flat-square">
   <img alt="Licencia BY-NC" src="https://img.shields.io/badge/licencia-BY--NC-6e8bff?style=flat-square">
 </p>
 <p>
@@ -16,7 +16,7 @@
   <img alt="Vite" src="https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white">
 </p>
 
-**[Despliegue](DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt)** · **[Arquitectura](docs/ia-snake/ARQUITECTURA.md)** · **[Manual de uso](docs/ia-snake/MANUAL-USUARIO.md)** · **[Resultados](docs/ia-snake/RESULTADOS.md)** · **[Decisiones](docs/ia-snake/DECISIONES.md)** · **[Cambios](CAMBIOS.txt)**
+**[API REST y despliegue](DOCUMENTACION_CONEXION_API_REST_RENDER_NETLIFY_VERCEL.txt)** · **[Arquitectura](docs/ia-snake/ARQUITECTURA.md)** · **[Manual de uso](docs/ia-snake/MANUAL-USUARIO.md)** · **[Resultados](docs/ia-snake/RESULTADOS.md)** · **[Decisiones](docs/ia-snake/DECISIONES.md)** · **[Cambios](CAMBIOS.txt)**
 
 </div>
 
@@ -65,7 +65,7 @@ npm run dev:all                     # servidor en :8000 + interfaz en http://loc
 | Comando | Qué hace |
 | --- | --- |
 | `npm run build && npm start` | Producción local: un solo proceso Python sirve la web y la API |
-| `npm run build:netlify` / `build:vercel` | Builds de despliegue ([guía](DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt)) |
+| Despliegue | Frontend en Netlify o Vercel (`npm run build` detecta la plataforma) y backend en Render (`render.yaml`). [Guía](DOCUMENTACION_CONEXION_API_REST_RENDER_NETLIFY_VERCEL.txt) |
 | `python -m pytest` | Todas las pruebas (`pip install -r requirements-dev.txt`) |
 | `python scripts/lineas_base.py` | Líneas base sin aprendizaje (azar y voraz) en las tres dificultades |
 | `python scripts/medir_modelos.py` | Entrena cada modelo desde cero y lo evalúa con semillas de prueba |
