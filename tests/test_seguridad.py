@@ -17,7 +17,7 @@ def test_produccion_exige_clave_y_https():
         cargar_ajustes({"APP_ENV": "produccion", "IA_SNAKE_TOKEN": "corta"})
     with pytest.raises(ErrorConfiguracion):
         cargar_ajustes({"APP_ENV": "produccion", "IA_SNAKE_TOKEN": TOKEN,
-                        "CORS_ORIGINS": "http://localhost:5173"})
+                        "CORS_ORIGINS": "http://dominio-publico-sin-https.com"})
     with pytest.raises(ErrorConfiguracion):
         cargar_ajustes({"CORS_ORIGINS": "*"})
     a = cargar_ajustes({"APP_ENV": "produccion", "IA_SNAKE_TOKEN": TOKEN,
@@ -49,7 +49,7 @@ def test_lectura_libre_escritura_con_clave(cliente):
     assert r.status_code == 401
     r = cliente.post("/api/lerk/reglas", json={"condiciones": ["libre"], "conclusion": "preferir"},
                      headers={"X-IA-Snake-Token": TOKEN})
-    assert r.status_code == 200
+    assert r.status_code == 201
     assert cliente.get("/api/modelos/lerk/exportar").status_code == 401
     assert cliente.get("/api/modelos/lerk/exportar", headers={"X-IA-Snake-Token": TOKEN}).status_code == 200
 
@@ -70,3 +70,27 @@ def test_produccion_oculta_docs_y_api_inexistente_es_404(cliente):
     assert r.status_code == 404 or "application/json" not in r.headers.get("content-type", "")
     r = cliente.get("/api/no-existe")
     assert r.status_code == 404 and r.headers["content-type"].startswith("application/json")
+
+
+def test_produccion_admite_frontend_local_y_patron_de_previews():
+    a = cargar_ajustes({"APP_ENV": "produccion", "IA_SNAKE_TOKEN": TOKEN,
+                        "CORS_ORIGINS": "http://localhost:5173,http://127.0.0.1:4173," + FRONT,
+                        "CORS_ORIGIN_REGEX": r"^https://ia-snake-[a-z0-9-]+\.vercel\.app$"})
+    assert "http://localhost:5173" in a.origenes_cors and a.patron_cors
+    for patron in [r"^https://.*$", ".*", r"^http://x\.com$", r"^https://[a-z]+$"]:
+        with pytest.raises(ErrorConfiguracion):
+            cargar_ajustes({"CORS_ORIGIN_REGEX": patron})
+
+
+def test_cors_patron_de_previews_en_el_servidor(tmp_path, monkeypatch):
+    monkeypatch.setenv("IA_SNAKE_DATOS", str(tmp_path))
+    monkeypatch.setenv("CORS_ORIGIN_REGEX", r"^https://ia-snake-[a-z0-9-]+\.vercel\.app$")
+    import ia_snake.servidor.app as m
+    c = TestClient(importlib.reload(m).app)
+    pre = {"Access-Control-Request-Method": "GET"}
+    ok = c.options("/api/health", headers={"Origin": "https://ia-snake-git-rama-x.vercel.app", **pre})
+    assert ok.headers.get("access-control-allow-origin") == "https://ia-snake-git-rama-x.vercel.app"
+    malo = c.options("/api/health", headers={"Origin": "https://otro-proyecto.vercel.app", **pre})
+    assert "access-control-allow-origin" not in malo.headers
+    monkeypatch.delenv("CORS_ORIGIN_REGEX")
+    importlib.reload(m)

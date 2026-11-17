@@ -10,6 +10,13 @@ from dataclasses import dataclass, field
 from ..nucleo.motor import Accion
 from ..nucleo.percepcion import Percepcion
 
+class NoEncontrado(LookupError):
+    """El recurso pedido no existe (la API lo traduce a 404)."""
+
+    def __str__(self):
+        return str(self.args[0]) if self.args else "No encontrado"
+
+
 # Estados con evidencia (docs/ia-snake/ETAPA-1-ANALISIS.md §6.3)
 SIN_ENTRENAR = "sin_entrenar"
 ENTRENADO = "entrenado"

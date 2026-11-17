@@ -61,7 +61,7 @@ Principal (produccion) NO se ha tocado: pasa de Beta a Principal tras tus prueba
   npm run build
   npm start          -> produccion: un solo proceso sirve web y API en :8000
 
-  python -m pytest                     -> 118 pruebas
+  python -m pytest                     -> 125 pruebas
   python scripts/lineas_base.py        -> azar y voraz en las tres dificultades
   python scripts/medir_modelos.py      -> entrena cada modelo desde cero y lo evalua
 
@@ -103,3 +103,10 @@ Principal (produccion) NO se ha tocado: pasa de Beta a Principal tras tus prueba
   Entrenamiento visible en vivo y con datos reales, distribución equilibrada de los paneles,
   etiquetado guiado de ARKIS y el nombre del proyecto corregido a IA-SNAKE. Detalle:
   CORRECCIONES_IA_SNAKE.txt
+
+9. SISTEMA DE DESPLIEGUE: API REST + RENDER (rama sistema-despliegue)
+---------------------------------------------------------------------
+  /api/health, códigos REST (201/202/204/404), CORS para frontend local y previews,
+  render.yaml con runtime nativo de Python y disco, arranque en frío en la web y
+  npm run build que detecta Netlify/Vercel. Detalle y pruebas:
+  DOCUMENTACION_CONEXION_API_REST_RENDER_NETLIFY_VERCEL.txt

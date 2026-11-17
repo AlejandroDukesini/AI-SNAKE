@@ -14,12 +14,17 @@ import uuid
 from collections import Counter
 
 from ..nucleo.motor import Accion
+from .base import NoEncontrado
 from .situacion import accion_por_nombre, percepcion_de
 
 ORIGENES = ("demostracion", "captura", "correccion")
 
 
 class ErrorDataset(ValueError):
+    pass
+
+
+class EjemploNoEncontrado(ErrorDataset, NoEncontrado):
     pass
 
 
@@ -41,7 +46,7 @@ class Dataset:
         for e in self.ejemplos:
             if e["id"] == id_:
                 return e
-        raise ErrorDataset(f"No existe el ejemplo {id_}")
+        raise EjemploNoEncontrado(f"No existe el ejemplo {id_}")
 
     def agregar(self, situacion: dict, etiqueta: str | None, origen: str, episodio: str,
                 paso: int = 0) -> dict:
@@ -102,7 +107,7 @@ class Dataset:
                 self.ejemplos.append(e)
                 self.revision += 1
                 return
-        raise ErrorDataset(f"No está en la papelera: {id_}")
+        raise EjemploNoEncontrado(f"No está en la papelera: {id_}")
 
     def aprobados(self) -> list[dict]:
         return [e for e in self.ejemplos if e["aprobado"] and e["etiqueta"] is not None]

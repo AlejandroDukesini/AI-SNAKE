@@ -1,6 +1,6 @@
 # IA-SNAKE — backend Python (y, opcionalmente, la web) en un solo contenedor.
 #
-# Es el servicio que EJECUTA Python en producción: Netlify no tiene runtime de Python y el
+# Alternativa al runtime nativo de render.yaml (Railway, Fly.io, VPS…). Es el servicio que EJECUTA Python en producción: Netlify no tiene runtime de Python y el
 # backend (sesiones en memoria, entrenamientos en segundo plano, persistencia en disco) no
 # encaja en funciones serverless. Funciona en cualquier host de contenedores con disco
 # persistente (Render, Railway, Fly.io, un VPS...). Ver DOCUMENTACION_DESPLIEGUE_NETLIFY_VERCEL.txt.

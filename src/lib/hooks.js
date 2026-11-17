@@ -22,7 +22,7 @@ export function useTrabajo(alTerminar) {
     if (!trabajo || trabajo.estado !== 'en_curso') return undefined;
     const id = setInterval(async () => {
       try {
-        const t = await api.get(`/api/trabajos/${trabajo.id}`);
+        const t = await api.getSinReintentos(`/api/trabajos/${trabajo.id}`);
         setTrabajo(t);
         if (t.estado !== 'en_curso') ref.current?.(t);
       } catch { /* reintenta en el siguiente tick */ }

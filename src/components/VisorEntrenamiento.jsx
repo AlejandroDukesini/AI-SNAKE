@@ -38,7 +38,7 @@ export default function VisorEntrenamiento({ trabajoId, modelo, tema, alTerminar
       if (enCurso) return;                     // nunca dos peticiones a la vez
       enCurso = true;
       try {
-        const r = await api.get(`/api/trabajos/${trabajoId}/vista`);
+        const r = await api.getSinReintentos(`/api/trabajos/${trabajoId}/vista`);
         if (!vivo) return;
         setV(r); setError(null);
         if (r.trabajo.estado !== 'en_curso' && !terminadoRef.current) { terminadoRef.current = true; alTerminar?.(r.trabajo); }

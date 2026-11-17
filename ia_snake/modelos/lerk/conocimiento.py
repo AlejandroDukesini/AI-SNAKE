@@ -24,7 +24,11 @@ from dataclasses import asdict, dataclass, field
 
 from ...nucleo.motor import ACCIONES, Accion
 from ...nucleo.percepcion import Percepcion
-from ..base import Agente, Decision
+from ..base import Agente, Decision, NoEncontrado
+
+
+class ReglaNoEncontrada(NoEncontrado, KeyError):
+    """Hereda de KeyError para no romper a quien ya la capturaba como tal."""
 from .predicados import cumple, hechos, texto_literal, validar_literal
 
 CONCLUSIONES = ("preferir", "prohibir", "anular")
@@ -112,7 +116,7 @@ class BaseConocimiento:
         for r in self.reglas:
             if r.id == id_:
                 return r
-        raise KeyError(f"No existe la regla {id_}")
+        raise ReglaNoEncontrada(f"No existe la regla {id_}")
 
     def agregar(self, regla: Regla) -> Regla:
         if regla.padre is not None:

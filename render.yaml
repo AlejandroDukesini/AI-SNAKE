@@ -1,26 +1,35 @@
-# Blueprint de Render para el backend Python de IA-SNAKE (ejemplo de host persistente).
-# Render → New → Blueprint → elige este repositorio. Te pedirá los valores marcados con
-# sync: false. El disco persistente requiere un plan de pago (el plan gratuito no tiene
-# disco: los modelos se perderían en cada reinicio).
+# Backend Python de IA-SNAKE en Render (Web Service, runtime nativo de Python).
+# Render → New → Blueprint → este repositorio. Pedirá los valores marcados con sync: false.
+#
+# Persistencia: el disco se monta en una SUBCARPETA del proyecto (la raíz
+# /opt/render/project/src se reescribe en cada build). Solo lo que hay bajo mountPath
+# sobrevive a reinicios y despliegues. Un disco exige plan de pago y una sola instancia.
+# El plan gratuito no tiene disco (los modelos se perderían) y se duerme tras 15 min de
+# inactividad (la web muestra «El servidor está arrancando…» mientras despierta).
 services:
   - type: web
     name: ia-snake-api
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: python
     plan: starter
     branch: Principal
-    numInstances: 1            # el estado vive en memoria y en SQLite: una sola instancia
-    healthCheckPath: /api/salud
+    numInstances: 1                 # estado en memoria + SQLite: una sola instancia
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn ia_snake.servidor.app:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers
+    healthCheckPath: /api/health
     disk:
       name: ia-snake-datos
-      mountPath: /datos
+      mountPath: /opt/render/project/src/datos
       sizeGB: 1
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
       - key: APP_ENV
         value: produccion
       - key: IA_SNAKE_DATOS
-        value: /datos
-      - key: IA_SNAKE_TOKEN        # clave de escritura (mínimo 16 caracteres)
+        value: /opt/render/project/src/datos
+      - key: IA_SNAKE_TOKEN         # clave de escritura, mínimo 16 caracteres
         sync: false
-      - key: CORS_ORIGINS       # p. ej. https://arkis.netlify.app,https://arkis.vercel.app
+      - key: CORS_ORIGINS           # https://<sitio>.netlify.app,https://<proyecto>.vercel.app
+        sync: false
+      - key: CORS_ORIGIN_REGEX      # opcional, vistas previas: ^https://ia-snake-[a-z0-9-]+\.vercel\.app$
         sync: false

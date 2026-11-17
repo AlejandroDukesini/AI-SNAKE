@@ -7,6 +7,7 @@ import traceback
 import uuid
 from dataclasses import asdict, is_dataclass
 
+from ..modelos.base import NoEncontrado
 from ..modelos.observacion import Observador
 
 
@@ -102,7 +103,10 @@ class GestorTrabajos:
         return t
 
     def obtener(self, id_: str) -> Trabajo:
-        return self._trabajos[id_]
+        try:
+            return self._trabajos[id_]
+        except KeyError:
+            raise NoEncontrado(f"No existe el trabajo {id_}") from None
 
     def lista(self) -> list[dict]:
         return [t.a_dict() for t in sorted(self._trabajos.values(), key=lambda t: -t.inicio)[:30]]

@@ -1,6 +1,6 @@
 // Compilación centralizada de IA-SNAKE.
 //
-//   npm run build            entorno + frontend + validación de producción + backend (sintaxis
+//   npm run build            (detecta Netlify/Vercel por NETLIFY=true / VERCEL=1) entorno + frontend + validación de producción + backend (sintaxis
 //                            siempre; verificación completa si las dependencias están instaladas)
 //   npm run build:frontend   solo el frontend
 //   npm run build:backend    solo el backend, verificación completa (obligatoria)
@@ -17,7 +17,9 @@ import { fileURLToPath } from 'node:url';
 
 const RAIZ = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')));
-const plataforma = args.plataforma || 'local';
+// En Netlify y Vercel, `npm run build` detecta la plataforma por sus variables de sistema.
+const plataforma = args.plataforma
+  || (process.env.NETLIFY === 'true' ? 'netlify' : process.env.VERCEL === '1' ? 'vercel' : 'local');
 const solo = args.solo || 'todo';
 const DESPLIEGUE = plataforma === 'netlify' || plataforma === 'vercel';
 
